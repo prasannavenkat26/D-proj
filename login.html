@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login | Drone Defense System</title>
+  <meta name="description" content="Admin and user login page for Drone Defense System.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="dark">
+  <div class="app-shell auth-shell">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar landing-topbar">
+      <div>
+        <p class="eyebrow">Access Control</p>
+        <h1>Login Portal</h1>
+      </div>
+      <div class="topbar-actions">
+        <a class="ghost-button button-link" href="index.html">Home</a>
+      </div>
+    </header>
+
+    <main class="auth-main">
+      <section class="card auth-card">
+        <div class="section-head auth-head">
+          <div>
+            <h2 class="auth-title">Choose Access Role</h2>
+            <p class="muted">Use the admin mode for control access, or user mode for monitoring access.</p>
+          </div>
+        </div>
+
+        <div class="auth-tabs" role="tablist" aria-label="Login roles">
+          <button id="adminTab" class="ghost-button auth-tab active" type="button" data-role="admin">Admin Login</button>
+          <button id="userTab" class="ghost-button auth-tab" type="button" data-role="user">User Login</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <input id="loginRole" type="hidden" value="admin">
+          <label class="auth-field">
+            <span>Email</span>
+            <input id="emailInput" type="email" placeholder="admin@dds.local" required>
+          </label>
+          <label class="auth-field">
+            <span>Password</span>
+            <input id="passwordInput" type="password" placeholder="Enter password" required>
+          </label>
+          <button class="primary-button" type="submit">Continue to Dashboard</button>
+          <p id="loginHint" class="muted auth-hint">Admin demo: <code>admin@dds.local</code> / <code>admin123</code></p>
+          <p id="loginError" class="auth-error hidden"></p>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script src="auth.js"></script>
+</body>
+</html>

@@ -10,6 +10,8 @@ const firebaseConfig = {
 
 const dom = {
   body: document.body,
+  roleBadge: document.getElementById("roleBadge"),
+  logoutButton: document.getElementById("logoutButton"),
   statusText: document.getElementById("statusText"),
   statusDescription: document.getElementById("statusDescription"),
   distanceValue: document.getElementById("distanceValue"),
@@ -51,6 +53,8 @@ const dom = {
 };
 
 const state = {
+  role: sessionStorage.getItem("dds-auth-role") || "",
+  email: sessionStorage.getItem("dds-auth-email") || "",
   theme: localStorage.getItem("dds-theme") || "dark",
   alarmEnabled: JSON.parse(localStorage.getItem("dds-alarm-enabled") ?? "true"),
   notificationsEnabled: JSON.parse(localStorage.getItem("dds-notifications-enabled") ?? "true"),
@@ -93,6 +97,7 @@ const dronesRef = database.ref("drones");
 const connectionRef = database.ref(".info/connected");
 
 function init() {
+  guardDashboardAccess();
   applyStoredPreferences();
   bindUi();
   renderHistory();
@@ -109,6 +114,12 @@ function init() {
   window.addEventListener("offline", syncBrowserConnectivity);
 }
 
+function guardDashboardAccess() {
+  if (!state.role) {
+    window.location.href = "login.html";
+  }
+}
+
 function applyStoredPreferences() {
   dom.body.dataset.theme = state.theme;
   dom.themeToggle.textContent = state.theme === "dark" ? "Light Mode" : "Dark Mode";
@@ -119,6 +130,14 @@ function applyStoredPreferences() {
   dom.geofenceToggle.checked = state.geofenceEnabled;
   dom.geofenceRadius.value = String(state.geofenceRadius);
   dom.geofenceRadiusValue.textContent = `${state.geofenceRadius} m`;
+  dom.roleBadge.textContent = state.role === "admin" ? "Admin" : "User";
+  dom.roleBadge.className = `mini-badge ${state.role === "admin" ? "offline" : "online"}`;
+  dom.adminToggle.classList.toggle("hidden", state.role !== "admin");
+  dom.manualAlert.classList.toggle("hidden", state.role !== "admin");
+  if (state.role !== "admin") {
+    dom.adminPanel.classList.add("hidden");
+    dom.adminPanel.setAttribute("aria-hidden", "true");
+  }
   updateBrowserStatus("Ready");
   updateThreatBadge("Low");
   updateInsightCards([]);
@@ -163,6 +182,7 @@ function bindUi() {
   });
   dom.exportHistory.addEventListener("click", exportHistory);
   dom.clearHistory.addEventListener("click", clearHistory);
+  dom.logoutButton.addEventListener("click", logout);
   document.addEventListener("click", ensureAudioContext, { once: true });
 }
 
@@ -175,6 +195,9 @@ function toggleTheme() {
 }
 
 function toggleAdminPanel() {
+  if (state.role !== "admin") {
+    return;
+  }
   state.adminOpen = !state.adminOpen;
   dom.adminPanel.classList.toggle("hidden", !state.adminOpen);
   dom.adminPanel.setAttribute("aria-hidden", String(!state.adminOpen));
@@ -928,6 +951,12 @@ function clearHistory() {
   localStorage.removeItem("dds-history");
   renderHistory();
   toast("History cleared", "Local alert history has been reset.", "safe");
+}
+
+function logout() {
+  sessionStorage.removeItem("dds-auth-role");
+  sessionStorage.removeItem("dds-auth-email");
+  window.location.href = "login.html";
 }
 
 init();

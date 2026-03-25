@@ -48,6 +48,11 @@ body {
   transition: background 0.35s ease, color 0.35s ease;
 }
 
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 button,
 input {
   font: inherit;
@@ -57,6 +62,12 @@ input {
   position: relative;
   min-height: 100vh;
   padding: 32px 18px 60px;
+}
+
+.landing-shell,
+.auth-shell {
+  display: grid;
+  align-items: center;
 }
 
 .ambient {
@@ -133,6 +144,103 @@ h1 {
 .dashboard {
   display: grid;
   gap: 20px;
+}
+
+.landing-main,
+.auth-main {
+  max-width: 1320px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.landing-hero,
+.auth-card {
+  padding: 32px;
+}
+
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr;
+  gap: 24px;
+}
+
+.landing-title,
+.auth-title {
+  font-family: "Orbitron", sans-serif;
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 1.2;
+  margin: 18px 0 12px;
+}
+
+.landing-actions,
+.auth-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.landing-panel,
+.landing-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  height: 100%;
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card {
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 8px;
+}
+
+.auth-field span {
+  color: var(--muted);
+}
+
+.auth-field input {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 0 16px;
+}
+
+.auth-tab.active {
+  background: linear-gradient(135deg, #48dbfb, #00f5d4);
+  color: #04111f;
+}
+
+.auth-hint {
+  margin: 0;
+}
+
+.auth-error {
+  margin: 0;
+  color: var(--danger);
 }
 
 .hero-grid,
@@ -552,7 +660,8 @@ h1 {
 @media (max-width: 1100px) {
   .hero-grid,
   .content-grid,
-  .hero-card {
+  .hero-card,
+  .landing-hero {
     grid-template-columns: 1fr;
   }
 
@@ -590,6 +699,10 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .landing-grid {
+    grid-template-columns: 1fr;
+  }
+
   .stat-tile,
   .metric-box,
   .admin-info,
@@ -605,7 +718,9 @@ h1 {
   .history-card,
   .fleet-card,
   .chart-card,
-  .admin-panel {
+  .admin-panel,
+  .landing-hero,
+  .auth-card {
     padding: 18px;
   }
 
@@ -681,6 +796,12 @@ h1 {
   .command-card {
     padding: 16px;
     border-radius: 20px;
+  }
+
+  .landing-actions,
+  .auth-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .stat-tile strong,
