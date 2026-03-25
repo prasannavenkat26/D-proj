@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drone Defense System</title>
+  <meta name="description" content="Real-time drone detection dashboard with Firebase, radar, maps, alerts, and live analytics.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="dark">
+  <div class="app-shell">
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Autonomous Airspace Monitoring</p>
+        <h1>🚀 Drone Defense System</h1>
+      </div>
+      <div class="topbar-actions">
+        <button id="themeToggle" class="ghost-button" type="button" aria-label="Switch theme">Light Mode</button>
+        <button id="adminToggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="adminPanel">Admin Panel</button>
+      </div>
+    </header>
+
+    <main class="dashboard">
+      <section class="hero-grid">
+        <article class="card hero-card">
+          <div class="hero-copy">
+            <span id="deviceStatusBadge" class="badge online">System Online</span>
+            <h2 id="statusText" class="status-text loading">Waiting...</h2>
+            <p id="statusDescription" class="muted">Listening for live drone telemetry from Firebase Realtime Database.</p>
+            <div class="quick-stats">
+              <div class="stat-tile">
+                <span class="tile-label">Distance</span>
+                <strong id="distanceValue">-- m</strong>
+              </div>
+              <div class="stat-tile">
+                <span class="tile-label">Last Update</span>
+                <strong id="timestampValue">No signal yet</strong>
+              </div>
+              <div class="stat-tile">
+                <span class="tile-label">Tracked Drones</span>
+                <strong id="droneCount">0</strong>
+              </div>
+            </div>
+            <div class="control-row">
+              <button id="alarmToggle" class="primary-button" type="button">Alarm: ON</button>
+              <button id="manualAlert" class="danger-button" type="button">Manual Alert Trigger</button>
+            </div>
+          </div>
+          <div class="hero-radar">
+            <canvas id="radarCanvas" width="420" height="420" aria-label="Animated drone radar"></canvas>
+          </div>
+        </article>
+
+        <article class="card telemetry-card">
+          <div class="section-head">
+            <h3>Live Telemetry</h3>
+            <span id="connectionState" class="mini-badge">Connecting...</span>
+          </div>
+          <div class="metric-grid">
+            <div class="metric-box">
+              <span>Battery</span>
+              <div class="meter">
+                <div id="batteryBar" class="meter-fill battery"></div>
+              </div>
+              <strong id="batteryValue">--%</strong>
+            </div>
+            <div class="metric-box">
+              <span>Signal</span>
+              <div class="meter">
+                <div id="signalBar" class="meter-fill signal"></div>
+              </div>
+              <strong id="signalValue">--%</strong>
+            </div>
+            <div class="metric-box">
+              <span>Coordinates</span>
+              <strong id="coordinatesValue">--, --</strong>
+            </div>
+            <div class="metric-box">
+              <span>Alert Mode</span>
+              <strong id="alertModeValue">Standby</strong>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="card map-card">
+          <div class="section-head">
+            <h3>Drone Location Map</h3>
+            <span id="mapStatus" class="mini-badge">Map Initializing</span>
+          </div>
+          <div id="map" class="map-panel" role="img" aria-label="Google map showing tracked drone location"></div>
+          <p id="mapFallback" class="map-fallback hidden">
+            Google Maps JavaScript API is unavailable. Add your API key in <code>index.html</code> to enable the live map.
+          </p>
+        </article>
+
+        <article class="card history-card">
+          <div class="section-head">
+            <h3>Alert History</h3>
+            <span id="historyCount" class="mini-badge">0 events</span>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="card fleet-card">
+          <div class="section-head">
+            <h3>Tracked Drone Fleet</h3>
+            <span class="mini-badge">Multi-Drone Support</span>
+          </div>
+          <div id="fleetList" class="fleet-list"></div>
+        </article>
+
+        <article class="card chart-card">
+          <div class="section-head">
+            <h3>Threat Analytics</h3>
+            <span class="mini-badge">Live Visualization</span>
+          </div>
+          <canvas id="chartCanvas" width="640" height="260" aria-label="Distance chart for drone telemetry"></canvas>
+        </article>
+      </section>
+
+      <aside id="adminPanel" class="card admin-panel hidden" aria-hidden="true">
+        <div class="section-head">
+          <h3>Admin Controls</h3>
+          <span class="mini-badge">Secure Local UI</span>
+        </div>
+        <div class="admin-grid">
+          <label class="toggle-row">
+            <span>Notification Popups</span>
+            <input id="notificationToggle" type="checkbox" checked>
+          </label>
+          <label class="toggle-row">
+            <span>Radar Animation</span>
+            <input id="radarToggle" type="checkbox" checked>
+          </label>
+          <label class="toggle-row">
+            <span>Auto Reconnect</span>
+            <input id="reconnectToggle" type="checkbox" checked>
+          </label>
+          <div class="admin-info">
+            <span>Firebase Path</span>
+            <strong><code>/drone</code> and <code>/drones</code></strong>
+          </div>
+          <div class="admin-info">
+            <span>Browser State</span>
+            <strong id="browserStatus">Ready</strong>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="notificationContainer" class="notification-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    window.DRONE_DEFENSE_MAPS_API_KEY = "";
+  </script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
