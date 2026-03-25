@@ -77,20 +77,6 @@ const rootDroneRef = database.ref("drone");
 const dronesRef = database.ref("drones");
 const connectionRef = database.ref(".info/connected");
 
-function getMapsApiKey() {
-  const params = new URLSearchParams(window.location.search);
-  const urlKey = params.get("mapsKey");
-  if (urlKey) {
-    localStorage.setItem("dds-google-maps-key", urlKey);
-    return urlKey;
-  }
-  return (
-    localStorage.getItem("dds-google-maps-key") ||
-    window.DRONE_DEFENSE_MAPS_API_KEY ||
-    ""
-  ).trim();
-}
-
 function init() {
   applyStoredPreferences();
   bindUi();
@@ -666,49 +652,31 @@ function renderRadar() {
 }
 
 function initMap() {
-  if (window.google && window.google.maps) {
-    setupMap();
-    return;
-  }
-
-  const apiKey = getMapsApiKey();
-  if (!apiKey) {
-    dom.mapStatus.textContent = "Maps Key Missing";
-    dom.mapFallback.classList.remove("hidden");
-    return;
-  }
-
-  const script = document.createElement("script");
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=initDroneDefenseMap`;
-  script.async = true;
-  script.defer = true;
-  script.onerror = () => {
+  if (!window.L) {
     dom.mapStatus.textContent = "Map Load Failed";
     dom.mapFallback.classList.remove("hidden");
-  };
-  window.initDroneDefenseMap = setupMap;
-  document.head.appendChild(script);
+    return;
+  }
+  setupMap();
 }
 
 function setupMap() {
   state.mapLoaded = true;
   const fallbackLocation = { lat: 13.0827, lng: 80.2707 };
-  state.map = new google.maps.Map(document.getElementById("map"), {
-    center: fallbackLocation,
-    zoom: 11,
-    styles: getMapStyles(),
-    disableDefaultUI: false,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false
-  });
+  state.map = L.map("map", {
+    zoomControl: true,
+    attributionControl: true
+  }).setView([fallbackLocation.lat, fallbackLocation.lng], 11);
 
-  state.marker = new google.maps.Marker({
-    position: fallbackLocation,
-    map: state.map,
-    title: "Tracked Drone",
-    animation: google.maps.Animation.DROP
-  });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: "&copy; OpenStreetMap contributors"
+  }).addTo(state.map);
+
+  state.marker = L.marker([fallbackLocation.lat, fallbackLocation.lng], {
+    title: "Tracked Drone"
+  }).addTo(state.map);
+  state.marker.bindPopup("Tracked Drone");
 
   dom.mapStatus.textContent = "Map Tracking Active";
   dom.mapFallback.classList.add("hidden");
@@ -720,21 +688,9 @@ function updateMap(drone) {
   }
 
   const position = { lat: drone.lat, lng: drone.lng };
-  state.marker.setPosition(position);
-  state.map.panTo(position);
-}
-
-function getMapStyles() {
-  return state.theme === "dark"
-    ? [
-        { elementType: "geometry", stylers: [{ color: "#08101d" }] },
-        { elementType: "labels.text.stroke", stylers: [{ color: "#08101d" }] },
-        { elementType: "labels.text.fill", stylers: [{ color: "#8fa9d6" }] },
-        { featureType: "road", elementType: "geometry", stylers: [{ color: "#0f2038" }] },
-        { featureType: "water", elementType: "geometry", stylers: [{ color: "#06111f" }] },
-        { featureType: "poi", stylers: [{ visibility: "off" }] }
-      ]
-    : [];
+  state.marker.setLatLng([position.lat, position.lng]);
+  state.marker.setPopupContent(`Tracked Drone<br>${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`);
+  state.map.panTo([position.lat, position.lng], { animate: true, duration: 0.5 });
 }
 
 function handleFirebaseError(error) {

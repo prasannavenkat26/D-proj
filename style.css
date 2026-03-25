@@ -347,6 +347,17 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.map-panel .leaflet-control-attribution,
+.map-panel .leaflet-control-zoom a {
+  color: #10203d;
+}
+
+.map-panel .leaflet-popup-content-wrapper,
+.map-panel .leaflet-popup-tip {
+  background: rgba(10, 18, 36, 0.92);
+  color: #ecf4ff;
+}
+
 .map-fallback {
   margin: 14px 0 0;
   color: var(--muted);
