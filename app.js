@@ -77,6 +77,20 @@ const rootDroneRef = database.ref("drone");
 const dronesRef = database.ref("drones");
 const connectionRef = database.ref(".info/connected");
 
+function getMapsApiKey() {
+  const params = new URLSearchParams(window.location.search);
+  const urlKey = params.get("mapsKey");
+  if (urlKey) {
+    localStorage.setItem("dds-google-maps-key", urlKey);
+    return urlKey;
+  }
+  return (
+    localStorage.getItem("dds-google-maps-key") ||
+    window.DRONE_DEFENSE_MAPS_API_KEY ||
+    ""
+  ).trim();
+}
+
 function init() {
   applyStoredPreferences();
   bindUi();
@@ -657,7 +671,7 @@ function initMap() {
     return;
   }
 
-  const apiKey = window.DRONE_DEFENSE_MAPS_API_KEY;
+  const apiKey = getMapsApiKey();
   if (!apiKey) {
     dom.mapStatus.textContent = "Maps Key Missing";
     dom.mapFallback.classList.remove("hidden");
