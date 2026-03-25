@@ -430,7 +430,7 @@ function handleDetectionEvent(drone, manual) {
     return;
   }
 
-  const title = manual ? "Manual alert triggered" : `Drone Detected • ${drone.id}`;
+  const title = manual ? "Manual alert triggered" : `Drone Detected - ${drone.id}`;
   const detail = manual
     ? "Operator manually activated the siren and notification workflow."
     : `Target at ${formatNumber(drone.distance)} meters, battery ${formatNumber(drone.battery)}%, signal ${formatNumber(drone.signal)}%.`;
@@ -483,7 +483,7 @@ function renderFleet() {
       const detected = isDetected(drone);
       return `
         <div class="fleet-item">
-          <strong>${escapeHtml(drone.id)} • ${escapeHtml(drone.status)}</strong>
+          <strong>${escapeHtml(drone.id)} - ${escapeHtml(drone.status)}</strong>
           <p>Distance: ${formatNumber(drone.distance)} m | Battery: ${formatNumber(drone.battery)}% | Signal: ${formatNumber(drone.signal)}%</p>
           <p>${detected ? "Threat tracking active" : "Standby"} | ${formatTimestamp(drone.timestamp)}</p>
         </div>
