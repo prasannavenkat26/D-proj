@@ -37,7 +37,17 @@ const dom = {
   browserStatus: document.getElementById("browserStatus"),
   mapStatus: document.getElementById("mapStatus"),
   mapFallback: document.getElementById("mapFallback"),
-  notificationContainer: document.getElementById("notificationContainer")
+  notificationContainer: document.getElementById("notificationContainer"),
+  threatLevelBadge: document.getElementById("threatLevelBadge"),
+  nearestDroneValue: document.getElementById("nearestDroneValue"),
+  avgBatteryValue: document.getElementById("avgBatteryValue"),
+  avgSignalValue: document.getElementById("avgSignalValue"),
+  geofenceStatusValue: document.getElementById("geofenceStatusValue"),
+  exportHistory: document.getElementById("exportHistory"),
+  clearHistory: document.getElementById("clearHistory"),
+  geofenceToggle: document.getElementById("geofenceToggle"),
+  geofenceRadius: document.getElementById("geofenceRadius"),
+  geofenceRadiusValue: document.getElementById("geofenceRadiusValue")
 };
 
 const state = {
@@ -46,12 +56,15 @@ const state = {
   notificationsEnabled: JSON.parse(localStorage.getItem("dds-notifications-enabled") ?? "true"),
   radarEnabled: JSON.parse(localStorage.getItem("dds-radar-enabled") ?? "true"),
   reconnectEnabled: JSON.parse(localStorage.getItem("dds-reconnect-enabled") ?? "true"),
+  geofenceEnabled: JSON.parse(localStorage.getItem("dds-geofence-enabled") ?? "false"),
+  geofenceRadius: Number(localStorage.getItem("dds-geofence-radius") || 120),
   adminOpen: false,
   firebaseConnected: false,
   browserOnline: navigator.onLine,
   mapLoaded: false,
   map: null,
   marker: null,
+  trailLine: null,
   sirenContext: null,
   sirenNodes: [],
   sirenInterval: null,
@@ -61,9 +74,11 @@ const state = {
   history: JSON.parse(localStorage.getItem("dds-history") || "[]").slice(0, 30),
   chartPoints: [],
   lastAlertSignature: "",
+  lastGeofenceSignature: "",
   reconnectTimer: null,
   freshnessInterval: null,
-  lastFirebaseSnapshotAt: 0
+  lastFirebaseSnapshotAt: 0,
+  latestTrail: []
 };
 
 const radarCanvas = document.getElementById("radarCanvas");
@@ -101,7 +116,12 @@ function applyStoredPreferences() {
   dom.notificationToggle.checked = state.notificationsEnabled;
   dom.radarToggle.checked = state.radarEnabled;
   dom.reconnectToggle.checked = state.reconnectEnabled;
+  dom.geofenceToggle.checked = state.geofenceEnabled;
+  dom.geofenceRadius.value = String(state.geofenceRadius);
+  dom.geofenceRadiusValue.textContent = `${state.geofenceRadius} m`;
   updateBrowserStatus("Ready");
+  updateThreatBadge("Low");
+  updateInsightCards([]);
 }
 
 function bindUi() {
@@ -130,6 +150,19 @@ function bindUi() {
     localStorage.setItem("dds-reconnect-enabled", JSON.stringify(state.reconnectEnabled));
     resetFreshnessTimer();
   });
+  dom.geofenceToggle.addEventListener("change", (event) => {
+    state.geofenceEnabled = event.target.checked;
+    localStorage.setItem("dds-geofence-enabled", JSON.stringify(state.geofenceEnabled));
+    updateInsightCards(state.drones);
+  });
+  dom.geofenceRadius.addEventListener("input", (event) => {
+    state.geofenceRadius = Number(event.target.value);
+    dom.geofenceRadiusValue.textContent = `${state.geofenceRadius} m`;
+    localStorage.setItem("dds-geofence-radius", String(state.geofenceRadius));
+    updateInsightCards(state.drones);
+  });
+  dom.exportHistory.addEventListener("click", exportHistory);
+  dom.clearHistory.addEventListener("click", clearHistory);
   document.addEventListener("click", ensureAudioContext, { once: true });
 }
 
@@ -138,9 +171,6 @@ function toggleTheme() {
   dom.body.dataset.theme = state.theme;
   dom.themeToggle.textContent = state.theme === "dark" ? "Light Mode" : "Dark Mode";
   localStorage.setItem("dds-theme", state.theme);
-  if (state.map) {
-    state.map.setOptions({ styles: getMapStyles() });
-  }
   renderChart();
 }
 
@@ -407,6 +437,8 @@ function updateDashboard(drone, drones) {
   updateMap(drone);
   updateChart(drone);
   renderFleet();
+  updateInsightCards(drones);
+  evaluateGeofence(drone);
 
   if (detected) {
     handleDetectionEvent(drone, false);
@@ -490,6 +522,56 @@ function renderFleet() {
       `;
     })
     .join("");
+}
+
+function updateInsightCards(drones) {
+  if (!drones.length) {
+    dom.nearestDroneValue.textContent = "None";
+    dom.avgBatteryValue.textContent = "--%";
+    dom.avgSignalValue.textContent = "--%";
+    dom.geofenceStatusValue.textContent = state.geofenceEnabled ? `Armed at ${state.geofenceRadius} m` : "Monitoring Off";
+    updateThreatBadge("Low");
+    return;
+  }
+
+  const nearest = drones.reduce((best, drone) => (drone.distance < best.distance ? drone : best), drones[0]);
+  const avgBattery = drones.reduce((sum, drone) => sum + drone.battery, 0) / drones.length;
+  const avgSignal = drones.reduce((sum, drone) => sum + drone.signal, 0) / drones.length;
+  const detectedCount = drones.filter(isDetected).length;
+  const level = detectedCount >= 2 || nearest.distance <= 40 ? "Critical" : detectedCount === 1 || nearest.distance <= 80 ? "High" : "Low";
+
+  dom.nearestDroneValue.textContent = `${nearest.id} (${formatNumber(nearest.distance)} m)`;
+  dom.avgBatteryValue.textContent = `${formatNumber(avgBattery)}%`;
+  dom.avgSignalValue.textContent = `${formatNumber(avgSignal)}%`;
+  dom.geofenceStatusValue.textContent = state.geofenceEnabled ? `Armed at ${state.geofenceRadius} m` : "Monitoring Off";
+  updateThreatBadge(level);
+}
+
+function updateThreatBadge(level) {
+  dom.threatLevelBadge.textContent = `Threat: ${level}`;
+  dom.threatLevelBadge.className =
+    level === "Critical" ? "mini-badge offline" : level === "High" ? "mini-badge warning" : "mini-badge online";
+}
+
+function evaluateGeofence(drone) {
+  if (!state.geofenceEnabled) {
+    return;
+  }
+  const breached = Number(drone.distance) <= state.geofenceRadius;
+  const signature = `${drone.id}-${drone.timestamp}-${breached}`;
+  if (!breached || state.lastGeofenceSignature === signature) {
+    return;
+  }
+
+  state.lastGeofenceSignature = signature;
+  const title = `Geofence breach - ${drone.id}`;
+  const detail = `Target entered the ${state.geofenceRadius} meter perimeter at ${formatNumber(drone.distance)} meters.`;
+  notifyBrowser(title, detail);
+  pushHistory({
+    title,
+    detail,
+    timestamp: Date.now()
+  });
 }
 
 function updateChart(drone) {
@@ -677,6 +759,11 @@ function setupMap() {
     title: "Tracked Drone"
   }).addTo(state.map);
   state.marker.bindPopup("Tracked Drone");
+  state.trailLine = L.polyline([], {
+    color: "#48dbfb",
+    weight: 3,
+    opacity: 0.8
+  }).addTo(state.map);
 
   dom.mapStatus.textContent = "Map Tracking Active";
   dom.mapFallback.classList.add("hidden");
@@ -690,6 +777,11 @@ function updateMap(drone) {
   const position = { lat: drone.lat, lng: drone.lng };
   state.marker.setLatLng([position.lat, position.lng]);
   state.marker.setPopupContent(`Tracked Drone<br>${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`);
+  state.latestTrail.push([position.lat, position.lng]);
+  state.latestTrail = state.latestTrail.slice(-12);
+  if (state.trailLine) {
+    state.trailLine.setLatLngs(state.latestTrail);
+  }
   state.map.panTo([position.lat, position.lng], { animate: true, duration: 0.5 });
 }
 
@@ -757,6 +849,7 @@ function setNoDataState() {
   document.querySelector(".hero-card").classList.remove("hero-alert");
   stopSiren();
   renderFleet();
+  updateInsightCards([]);
 }
 
 function resizeCanvases() {
@@ -810,6 +903,31 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function exportHistory() {
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    totalEvents: state.history.length,
+    events: state.history
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `drone-defense-history-${Date.now()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  toast("History exported", "Alert history downloaded as JSON.", "safe");
+}
+
+function clearHistory() {
+  state.history = [];
+  localStorage.removeItem("dds-history");
+  renderHistory();
+  toast("History cleared", "Local alert history has been reset.", "safe");
 }
 
 init();

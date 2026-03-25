@@ -91,6 +91,47 @@
       </section>
 
       <section class="content-grid">
+        <article class="card insights-card">
+          <div class="section-head">
+            <h3>Operational Insights</h3>
+            <span id="threatLevelBadge" class="mini-badge">Threat: Low</span>
+          </div>
+          <div class="insights-grid">
+            <div class="metric-box">
+              <span>Nearest Drone</span>
+              <strong id="nearestDroneValue">None</strong>
+            </div>
+            <div class="metric-box">
+              <span>Average Battery</span>
+              <strong id="avgBatteryValue">--%</strong>
+            </div>
+            <div class="metric-box">
+              <span>Average Signal</span>
+              <strong id="avgSignalValue">--%</strong>
+            </div>
+            <div class="metric-box">
+              <span>Geofence</span>
+              <strong id="geofenceStatusValue">Monitoring Off</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="card command-card">
+          <div class="section-head">
+            <h3>Command Center</h3>
+            <span class="mini-badge">Quick Actions</span>
+          </div>
+          <div class="control-row">
+            <button id="exportHistory" class="ghost-button" type="button">Export History</button>
+            <button id="clearHistory" class="ghost-button" type="button">Clear History</button>
+          </div>
+          <p class="muted compact-copy">
+            Export the alert log as JSON for reporting, or clear local history without affecting Firebase telemetry.
+          </p>
+        </article>
+      </section>
+
+      <section class="content-grid">
         <article class="card map-card">
           <div class="section-head">
             <h3>Drone Location Map</h3>
@@ -146,6 +187,15 @@
           <label class="toggle-row">
             <span>Auto Reconnect</span>
             <input id="reconnectToggle" type="checkbox" checked>
+          </label>
+          <label class="toggle-row">
+            <span>Geofence Alerts</span>
+            <input id="geofenceToggle" type="checkbox">
+          </label>
+          <label class="range-row" for="geofenceRadius">
+            <span>Geofence Radius</span>
+            <input id="geofenceRadius" type="range" min="25" max="300" step="5" value="120">
+            <strong id="geofenceRadiusValue">120 m</strong>
           </label>
           <div class="admin-info">
             <span>Firebase Path</span>

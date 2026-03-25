@@ -222,6 +222,10 @@ h1 {
   color: var(--danger);
 }
 
+.mini-badge.warning {
+  color: var(--warning);
+}
+
 .status-text {
   font-size: clamp(1.9rem, 3vw, 3rem);
 }
@@ -247,6 +251,7 @@ h1 {
 
 .quick-stats,
 .metric-grid,
+.insights-grid,
 .admin-grid {
   display: grid;
   gap: 14px;
@@ -314,6 +319,11 @@ h1 {
   margin-top: 18px;
 }
 
+.insights-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
 .meter {
   height: 10px;
   background: rgba(255, 255, 255, 0.08);
@@ -361,6 +371,10 @@ h1 {
 .map-fallback {
   margin: 14px 0 0;
   color: var(--muted);
+}
+
+.compact-copy {
+  margin: 16px 0 0;
 }
 
 .history-list,
@@ -450,6 +464,16 @@ h1 {
   align-items: center;
 }
 
+.range-row {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.range-row input[type="range"] {
+  width: 100%;
+}
+
 .toggle-row input {
   width: 18px;
   height: 18px;
@@ -536,6 +560,7 @@ h1 {
 
   .quick-stats,
   .telemetry-card .metric-grid,
+  .insights-grid,
   .admin-grid {
     grid-template-columns: 1fr;
   }
