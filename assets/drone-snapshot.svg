@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" fill="none">
+  <rect width="960" height="540" rx="32" fill="#04111F"/>
+  <path d="M0 90h960M0 180h960M0 270h960M0 360h960M0 450h960" stroke="#123B62" stroke-opacity=".5"/>
+  <path d="M160 0v540M320 0v540M480 0v540M640 0v540M800 0v540" stroke="#123B62" stroke-opacity=".5"/>
+  <circle cx="480" cy="270" r="120" stroke="#48DBFB" stroke-width="3" stroke-dasharray="8 10"/>
+  <circle cx="480" cy="270" r="10" fill="#00F5D4"/>
+  <path d="M480 150l18 55h58l-47 34 18 55-47-34-47 34 18-55-47-34h58l18-55z" fill="#48DBFB" fill-opacity=".8"/>
+  <rect x="48" y="40" width="300" height="92" rx="20" fill="#081A30" stroke="#1F4B77"/>
+  <text x="80" y="82" fill="#ECF4FF" font-family="Arial, sans-serif" font-size="28" font-weight="700">LIVE CAMERA SNAPSHOT</text>
+  <text x="80" y="112" fill="#8FB3DA" font-family="Arial, sans-serif" font-size="22">Optical feed unavailable - simulation frame</text>
+</svg>

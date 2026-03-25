@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Drone Defense System</title>
-  <meta name="description" content="Landing page for the Drone Defense System real-time monitoring platform.">
+  <title>Drone Defence System</title>
+  <meta name="description" content="Drone Defence System landing page and secure entry point.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -17,8 +17,8 @@
 
     <header class="topbar landing-topbar">
       <div>
-        <p class="eyebrow">Integrated Airspace Security</p>
-        <h1>&#128640; Drone Defense System</h1>
+        <p class="eyebrow">Military-Grade Airspace Monitoring</p>
+        <h1>Drone Defence System</h1>
       </div>
       <div class="topbar-actions">
         <a class="ghost-button button-link" href="login.html">Login</a>
@@ -26,40 +26,45 @@
     </header>
 
     <main class="landing-main">
-      <section class="landing-hero card">
+      <section class="card landing-hero">
         <div class="landing-copy">
-          <span class="badge online">Realtime Monitoring Ready</span>
-          <h2 class="landing-title">Secure the sky with live detection, threat analytics, and operator control.</h2>
+          <span class="badge online">Realtime Defence Grid Online</span>
+          <h2 class="landing-title">Track, classify, and respond to drone threats with a premium live command interface.</h2>
           <p class="muted">
-            Access a modern defense dashboard built for mobile and desktop, with radar visuals, Firebase-powered telemetry, fleet tracking, and alert workflows.
+            Built for hackathons and field demos, the Drone Defence System streams Firebase telemetry, visualizes threats on radar and map layers, and gives operators a synchronized viewer and admin experience.
           </p>
           <div class="landing-actions">
-            <a class="primary-button button-link" href="login.html">Open Login</a>
-            <a class="ghost-button button-link" href="login.html#user">User Access</a>
+            <a class="primary-button button-link" href="login.html">Open Secure Login</a>
+            <a class="ghost-button button-link" href="admin.html">Admin Console</a>
           </div>
         </div>
         <div class="landing-panel">
           <div class="landing-grid">
             <div class="stat-tile">
-              <span class="tile-label">Realtime Feed</span>
-              <strong>Firebase Live</strong>
+              <span class="tile-label">Realtime Sync</span>
+              <strong>Firebase RTDB</strong>
             </div>
             <div class="stat-tile">
-              <span class="tile-label">Map Engine</span>
-              <strong>OpenStreetMap</strong>
+              <span class="tile-label">Map Tracking</span>
+              <strong>Leaflet + OSM</strong>
             </div>
             <div class="stat-tile">
-              <span class="tile-label">Threat Modes</span>
-              <strong>Admin + User</strong>
+              <span class="tile-label">Analytics</span>
+              <strong>Chart.js Live</strong>
             </div>
             <div class="stat-tile">
-              <span class="tile-label">Access Flow</span>
-              <strong>Landing to Login</strong>
+              <span class="tile-label">Operational Roles</span>
+              <strong>Admin + Viewer</strong>
             </div>
           </div>
         </div>
       </section>
     </main>
   </div>
+
+  <script src="auth.js"></script>
+  <script>
+    window.DDSAuth.redirectIfAuthenticated();
+  </script>
 </body>
 </html>

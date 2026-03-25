@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drone Defence System | Admin Control Center</title>
+  <meta name="description" content="Admin control center for Drone Defence System.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <img src="assets/shield-icon.svg" alt="Drone Defence System icon">
+        <div>
+          <p>Drone Defence</p>
+          <strong>Admin Control</strong>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#overview">Dashboard</a>
+        <a href="#control">Drone Control</a>
+        <a href="#alerts">Alerts</a>
+        <a href="#analytics">Analytics</a>
+        <a href="#settings">Settings</a>
+        <a href="#logs">Logs</a>
+        <a href="#firebase">Firebase</a>
+      </nav>
+      <div class="sidebar-actions">
+        <button id="backViewer" class="ghost-button" type="button">Viewer Dashboard</button>
+        <button id="logoutButton" class="ghost-button" type="button">Logout</button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <div>
+          <p class="eyebrow">Military-Grade Control Center</p>
+          <h1>Drone Defence System</h1>
+        </div>
+        <div class="admin-header-actions">
+          <span id="adminStateBadge" class="status-pill online">System Active</span>
+          <span id="modeBadge" class="status-pill warning">LIVE MODE</span>
+        </div>
+      </header>
+
+      <section id="overview" class="admin-section">
+        <div class="panel-grid four">
+          <article class="glass-card"><span>Active Drones</span><strong id="overviewDroneCount">0</strong></article>
+          <article class="glass-card"><span>Open Alerts</span><strong id="overviewAlertCount">0</strong></article>
+          <article class="glass-card"><span>System State</span><strong id="overviewSystemState">ONLINE</strong></article>
+          <article class="glass-card"><span>Admin Session</span><strong id="overviewSession">ADMIN</strong></article>
+        </div>
+      </section>
+
+      <section id="control" class="admin-section panel-grid two">
+        <article class="glass-card">
+          <div class="section-head"><h2>System Control</h2><span class="tag">Realtime</span></div>
+          <div class="button-grid">
+            <button id="toggleSystem" class="primary-button" type="button">Toggle System ON/OFF</button>
+            <button id="emergencyShutdown" class="danger-button" type="button">Emergency Shutdown</button>
+            <button id="resetSystem" class="ghost-button" type="button">Reset System</button>
+            <button id="toggleMode" class="ghost-button" type="button">Switch LIVE / SIMULATION</button>
+          </div>
+        </article>
+
+        <article class="glass-card">
+          <div class="section-head"><h2>Threat Management</h2><span class="tag">AI + Geofence</span></div>
+          <div class="form-grid">
+            <label><span>Threat Level</span><select id="adminThreatLevel"><option>LOW</option><option>MEDIUM</option><option>HIGH</option></select></label>
+            <label class="toggle-line"><span>Auto AI Threat</span><input id="aiThreatToggle" type="checkbox" checked></label>
+            <label class="toggle-line"><span>Geo-fencing</span><input id="geofenceToggle" type="checkbox"></label>
+            <label><span>Radius (m)</span><input id="geofenceRadius" type="number" min="25" max="500" step="5" value="120"></label>
+          </div>
+          <button id="applyThreatSettings" class="primary-button" type="button">Apply Threat Settings</button>
+        </article>
+      </section>
+
+      <section class="admin-section panel-grid two">
+        <article class="glass-card">
+          <div class="section-head"><h2>Drone Control Panel</h2><span class="tag">Fleet Editor</span></div>
+          <div class="form-grid">
+            <label><span>Drone ID</span><input id="droneIdInput" type="text" placeholder="drone-alpha"></label>
+            <label><span>Status</span><select id="droneStatusInput"><option>No Drone</option><option>Detected</option></select></label>
+            <label><span>Latitude</span><input id="droneLatInput" type="number" step="0.0001" value="13.0827"></label>
+            <label><span>Longitude</span><input id="droneLngInput" type="number" step="0.0001" value="80.2707"></label>
+            <label><span>Speed</span><input id="droneSpeedInput" type="number" step="1" value="35"></label>
+            <label><span>Altitude</span><input id="droneAltitudeInput" type="number" step="1" value="60"></label>
+            <label><span>Battery</span><input id="droneBatteryInput" type="number" step="1" value="85"></label>
+            <label><span>Signal</span><input id="droneSignalInput" type="number" step="1" value="92"></label>
+            <label><span>Distance</span><input id="droneDistanceInput" type="number" step="1" value="75"></label>
+            <label><span>Snapshot URL</span><input id="droneSnapshotInput" type="text" value="assets/drone-snapshot.svg"></label>
+          </div>
+          <div class="button-grid">
+            <button id="saveDrone" class="primary-button" type="button">Add / Update Drone</button>
+            <button id="removeDrone" class="danger-button" type="button">Remove Drone</button>
+            <button id="simulateMove" class="ghost-button" type="button">Simulate Movement</button>
+          </div>
+        </article>
+
+        <article class="glass-card">
+          <div class="section-head"><h2>Admin Map Control</h2><span class="tag">Drag + Zone</span></div>
+          <div id="adminMap" class="admin-map"></div>
+          <div class="button-grid">
+            <button id="toggleMapLayer" class="ghost-button" type="button">Toggle Map Layer</button>
+            <button id="setZoneFromCenter" class="ghost-button" type="button">Use Map Center as Zone</button>
+          </div>
+        </article>
+      </section>
+
+      <section id="alerts" class="admin-section panel-grid two">
+        <article class="glass-card">
+          <div class="section-head"><h2>Alert Management</h2><span class="tag">Firebase Alerts</span></div>
+          <div class="form-grid">
+            <label><span>Filter Level</span><select id="alertLevelFilter"><option value="">All</option><option>LOW</option><option>MEDIUM</option><option>HIGH</option></select></label>
+            <label><span>Filter Date</span><input id="alertDateFilter" type="date"></label>
+            <label class="toggle-line"><span>Siren Sound</span><input id="sirenToggle" type="checkbox" checked></label>
+            <label class="toggle-line"><span>Popup Alerts</span><input id="popupToggle" type="checkbox" checked></label>
+            <label class="toggle-line"><span>Push Notifications</span><input id="pushToggle" type="checkbox" checked></label>
+          </div>
+          <div class="button-grid">
+            <button id="triggerManualAlert" class="danger-button" type="button">Trigger Manual Alert</button>
+            <button id="applyAlertSettings" class="primary-button" type="button">Apply Alert Settings</button>
+          </div>
+          <div id="alertList" class="scroll-list"></div>
+        </article>
+
+        <article id="logs" class="glass-card">
+          <div class="section-head"><h2>Activity Logs</h2><span class="tag">Searchable</span></div>
+          <div class="form-grid">
+            <label><span>Search</span><input id="logSearch" type="text" placeholder="Search logs"></label>
+            <label><span>Date</span><input id="logDateFilter" type="date"></label>
+          </div>
+          <div id="logList" class="scroll-list"></div>
+        </article>
+      </section>
+
+      <section id="analytics" class="admin-section panel-grid two">
+        <article class="glass-card">
+          <div class="section-head"><h2>Analytics Dashboard</h2><span class="tag">Chart.js</span></div>
+          <canvas id="analyticsChart" height="220"></canvas>
+          <div class="button-grid">
+            <button id="exportJsonReport" class="ghost-button" type="button">Export JSON</button>
+            <button id="exportCsvReport" class="ghost-button" type="button">Export CSV</button>
+          </div>
+        </article>
+
+        <article class="glass-card">
+          <div class="section-head"><h2>Threat Distribution</h2><span class="tag">Realtime</span></div>
+          <canvas id="threatChart" height="220"></canvas>
+        </article>
+      </section>
+
+      <section id="settings" class="admin-section panel-grid two">
+        <article class="glass-card">
+          <div class="section-head"><h2>User Settings</h2><span class="tag">Global State</span></div>
+          <div class="form-grid">
+            <label class="toggle-line"><span>Radar Animation</span><input id="radarToggle" type="checkbox" checked></label>
+            <label class="toggle-line"><span>Notifications</span><input id="notificationsToggle" type="checkbox" checked></label>
+            <label class="toggle-line"><span>Auto Reconnect</span><input id="reconnectToggle" type="checkbox" checked></label>
+            <label class="toggle-line"><span>Offline Mode</span><input id="offlineToggle" type="checkbox" checked></label>
+            <label><span>Theme</span><select id="themeSelect"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+          </div>
+          <button id="saveSettings" class="primary-button" type="button">Save Settings</button>
+        </article>
+
+        <article id="firebase" class="glass-card">
+          <div class="section-head"><h2>Firebase Management</h2><span class="tag">Raw Data</span></div>
+          <div class="form-grid">
+            <label><span>Database Path</span><input id="databasePathInput" type="text" value="/drone"></label>
+          </div>
+          <textarea id="rawDataEditor" class="data-editor" spellcheck="false"></textarea>
+          <div class="button-grid">
+            <button id="loadPathData" class="ghost-button" type="button">Load Path</button>
+            <button id="savePathData" class="primary-button" type="button">Save JSON</button>
+            <button id="backupDatabase" class="ghost-button" type="button">Backup JSON</button>
+            <label class="ghost-button file-button">Import JSON<input id="importJsonInput" type="file" accept="application/json" hidden></label>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="auth.js"></script>
+  <script src="firebase.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

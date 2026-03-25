@@ -1,75 +1,101 @@
-const authState = {
-  currentRole: "admin",
-  credentials: {
+(function () {
+  const AUTH_STORAGE_KEY = "dds-auth-session";
+  const users = {
     admin: {
+      role: "admin",
+      label: "Admin",
       email: "admin@dds.local",
-      password: "admin123",
+      passwordHash: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      redirect: "admin.html",
       hint: "Admin demo: admin@dds.local / admin123"
     },
-    user: {
-      email: "user@dds.local",
-      password: "user123",
-      hint: "User demo: user@dds.local / user123"
+    viewer: {
+      role: "viewer",
+      label: "Viewer",
+      email: "viewer@dds.local",
+      passwordHash: "65375049b9e4d7cad6c9ba286fdeb9394b28135a3e84136404cfccfdcc438894",
+      redirect: "dashboard.html",
+      hint: "Viewer demo: viewer@dds.local / viewer123"
+    }
+  };
+
+  function saveSession(session) {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+  }
+
+  function getSession() {
+    try {
+      return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || "null");
+    } catch (error) {
+      return null;
     }
   }
-};
 
-const authDom = {
-  tabs: Array.from(document.querySelectorAll(".auth-tab")),
-  loginRole: document.getElementById("loginRole"),
-  emailInput: document.getElementById("emailInput"),
-  passwordInput: document.getElementById("passwordInput"),
-  loginForm: document.getElementById("loginForm"),
-  loginHint: document.getElementById("loginHint"),
-  loginError: document.getElementById("loginError")
-};
-
-function initAuth() {
-  const hashRole = window.location.hash.replace("#", "");
-  if (hashRole === "user" || hashRole === "admin") {
-    setRole(hashRole);
-  } else {
-    setRole("admin");
+  function clearSession() {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
   }
 
-  authDom.tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      setRole(tab.dataset.role);
-    });
-  });
-
-  authDom.loginForm.addEventListener("submit", handleLogin);
-}
-
-function setRole(role) {
-  authState.currentRole = role;
-  authDom.loginRole.value = role;
-  authDom.tabs.forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.role === role);
-  });
-  authDom.emailInput.value = authState.credentials[role].email;
-  authDom.passwordInput.value = authState.credentials[role].password;
-  authDom.loginHint.textContent = authState.credentials[role].hint;
-  authDom.loginError.classList.add("hidden");
-  authDom.loginError.textContent = "";
-}
-
-function handleLogin(event) {
-  event.preventDefault();
-  const role = authDom.loginRole.value;
-  const email = authDom.emailInput.value.trim().toLowerCase();
-  const password = authDom.passwordInput.value;
-  const expected = authState.credentials[role];
-
-  if (email !== expected.email || password !== expected.password) {
-    authDom.loginError.textContent = "Invalid credentials for the selected role.";
-    authDom.loginError.classList.remove("hidden");
-    return;
+  async function sha256(value) {
+    const data = new TextEncoder().encode(value);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(digest))
+      .map((item) => item.toString(16).padStart(2, "0"))
+      .join("");
   }
 
-  sessionStorage.setItem("dds-auth-role", role);
-  sessionStorage.setItem("dds-auth-email", expected.email);
-  window.location.href = "dashboard.html";
-}
+  async function login(role, email, password) {
+    const account = users[role];
+    if (!account) {
+      throw new Error("Unknown role.");
+    }
 
-initAuth();
+    const passwordHash = await sha256(password);
+    const normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail !== account.email || passwordHash !== account.passwordHash) {
+      throw new Error("Invalid credentials.");
+    }
+
+    const session = {
+      role: account.role,
+      email: account.email,
+      label: account.label,
+      loggedInAt: new Date().toISOString()
+    };
+    saveSession(session);
+    return session;
+  }
+
+  function requireRole(allowedRoles) {
+    const session = getSession();
+    if (!session || !allowedRoles.includes(session.role)) {
+      window.location.href = "login.html";
+      return null;
+    }
+    return session;
+  }
+
+  function redirectIfAuthenticated() {
+    const session = getSession();
+    if (!session) {
+      return;
+    }
+    const account = users[session.role];
+    if (account) {
+      window.location.href = account.redirect;
+    }
+  }
+
+  function getUserByRole(role) {
+    return users[role] || null;
+  }
+
+  window.DDSAuth = {
+    users,
+    login,
+    getSession,
+    clearSession,
+    requireRole,
+    redirectIfAuthenticated,
+    getUserByRole
+  };
+})();

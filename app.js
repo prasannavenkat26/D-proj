@@ -1,962 +1,729 @@
-const firebaseConfig = {
-  apiKey: "AIzaSyAJ3QEJyL_AFhMdOjwJKaeQUB0A937mQLI",
-  authDomain: "drone-defence-8fc8b.firebaseapp.com",
-  databaseURL: "https://drone-defence-8fc8b-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "drone-defence-8fc8b",
-  storageBucket: "drone-defence-8fc8b.firebasestorage.app",
-  messagingSenderId: "166788888102",
-  appId: "1:166788888102:web:734b737cb222cda1f698e7"
-};
-
-const dom = {
-  body: document.body,
-  roleBadge: document.getElementById("roleBadge"),
-  logoutButton: document.getElementById("logoutButton"),
-  statusText: document.getElementById("statusText"),
-  statusDescription: document.getElementById("statusDescription"),
-  distanceValue: document.getElementById("distanceValue"),
-  timestampValue: document.getElementById("timestampValue"),
-  droneCount: document.getElementById("droneCount"),
-  batteryValue: document.getElementById("batteryValue"),
-  batteryBar: document.getElementById("batteryBar"),
-  signalValue: document.getElementById("signalValue"),
-  signalBar: document.getElementById("signalBar"),
-  coordinatesValue: document.getElementById("coordinatesValue"),
-  alertModeValue: document.getElementById("alertModeValue"),
-  deviceStatusBadge: document.getElementById("deviceStatusBadge"),
-  connectionState: document.getElementById("connectionState"),
-  historyList: document.getElementById("historyList"),
-  historyCount: document.getElementById("historyCount"),
-  fleetList: document.getElementById("fleetList"),
-  themeToggle: document.getElementById("themeToggle"),
-  adminToggle: document.getElementById("adminToggle"),
-  adminPanel: document.getElementById("adminPanel"),
-  alarmToggle: document.getElementById("alarmToggle"),
-  manualAlert: document.getElementById("manualAlert"),
-  notificationToggle: document.getElementById("notificationToggle"),
-  radarToggle: document.getElementById("radarToggle"),
-  reconnectToggle: document.getElementById("reconnectToggle"),
-  browserStatus: document.getElementById("browserStatus"),
-  mapStatus: document.getElementById("mapStatus"),
-  mapFallback: document.getElementById("mapFallback"),
-  notificationContainer: document.getElementById("notificationContainer"),
-  threatLevelBadge: document.getElementById("threatLevelBadge"),
-  nearestDroneValue: document.getElementById("nearestDroneValue"),
-  avgBatteryValue: document.getElementById("avgBatteryValue"),
-  avgSignalValue: document.getElementById("avgSignalValue"),
-  geofenceStatusValue: document.getElementById("geofenceStatusValue"),
-  exportHistory: document.getElementById("exportHistory"),
-  clearHistory: document.getElementById("clearHistory"),
-  geofenceToggle: document.getElementById("geofenceToggle"),
-  geofenceRadius: document.getElementById("geofenceRadius"),
-  geofenceRadiusValue: document.getElementById("geofenceRadiusValue")
-};
-
-const state = {
-  role: sessionStorage.getItem("dds-auth-role") || "",
-  email: sessionStorage.getItem("dds-auth-email") || "",
-  theme: localStorage.getItem("dds-theme") || "dark",
-  alarmEnabled: JSON.parse(localStorage.getItem("dds-alarm-enabled") ?? "true"),
-  notificationsEnabled: JSON.parse(localStorage.getItem("dds-notifications-enabled") ?? "true"),
-  radarEnabled: JSON.parse(localStorage.getItem("dds-radar-enabled") ?? "true"),
-  reconnectEnabled: JSON.parse(localStorage.getItem("dds-reconnect-enabled") ?? "true"),
-  geofenceEnabled: JSON.parse(localStorage.getItem("dds-geofence-enabled") ?? "false"),
-  geofenceRadius: Number(localStorage.getItem("dds-geofence-radius") || 120),
-  adminOpen: false,
-  firebaseConnected: false,
-  browserOnline: navigator.onLine,
-  mapLoaded: false,
-  map: null,
-  marker: null,
-  trailLine: null,
-  sirenContext: null,
-  sirenNodes: [],
-  sirenInterval: null,
-  radarAngle: 0,
-  drones: [],
-  latestDrone: null,
-  history: JSON.parse(localStorage.getItem("dds-history") || "[]").slice(0, 30),
-  chartPoints: [],
-  lastAlertSignature: "",
-  lastGeofenceSignature: "",
-  reconnectTimer: null,
-  freshnessInterval: null,
-  lastFirebaseSnapshotAt: 0,
-  latestTrail: []
-};
-
-const radarCanvas = document.getElementById("radarCanvas");
-const radarCtx = radarCanvas.getContext("2d");
-const chartCanvas = document.getElementById("chartCanvas");
-const chartCtx = chartCanvas.getContext("2d");
-
-const firebaseApp = firebase.initializeApp(firebaseConfig);
-const database = firebase.database(firebaseApp);
-const rootDroneRef = database.ref("drone");
-const dronesRef = database.ref("drones");
-const connectionRef = database.ref(".info/connected");
-
-function init() {
-  guardDashboardAccess();
-  applyStoredPreferences();
-  bindUi();
-  renderHistory();
-  renderFleet();
-  renderChart();
-  resizeCanvases();
-  requestNotificationAccess();
-  initMap();
-  startRadarLoop();
-  subscribeRealtime();
-  syncBrowserConnectivity();
-  window.addEventListener("resize", resizeCanvases);
-  window.addEventListener("online", syncBrowserConnectivity);
-  window.addEventListener("offline", syncBrowserConnectivity);
-}
-
-function guardDashboardAccess() {
-  if (!state.role) {
-    window.location.href = "login.html";
-  }
-}
-
-function applyStoredPreferences() {
-  dom.body.dataset.theme = state.theme;
-  dom.themeToggle.textContent = state.theme === "dark" ? "Light Mode" : "Dark Mode";
-  dom.alarmToggle.textContent = `Alarm: ${state.alarmEnabled ? "ON" : "OFF"}`;
-  dom.notificationToggle.checked = state.notificationsEnabled;
-  dom.radarToggle.checked = state.radarEnabled;
-  dom.reconnectToggle.checked = state.reconnectEnabled;
-  dom.geofenceToggle.checked = state.geofenceEnabled;
-  dom.geofenceRadius.value = String(state.geofenceRadius);
-  dom.geofenceRadiusValue.textContent = `${state.geofenceRadius} m`;
-  dom.roleBadge.textContent = state.role === "admin" ? "Admin" : "User";
-  dom.roleBadge.className = `mini-badge ${state.role === "admin" ? "offline" : "online"}`;
-  dom.adminToggle.classList.toggle("hidden", state.role !== "admin");
-  dom.manualAlert.classList.toggle("hidden", state.role !== "admin");
-  if (state.role !== "admin") {
-    dom.adminPanel.classList.add("hidden");
-    dom.adminPanel.setAttribute("aria-hidden", "true");
-  }
-  updateBrowserStatus("Ready");
-  updateThreatBadge("Low");
-  updateInsightCards([]);
-}
-
-function bindUi() {
-  dom.themeToggle.addEventListener("click", toggleTheme);
-  dom.adminToggle.addEventListener("click", toggleAdminPanel);
-  dom.alarmToggle.addEventListener("click", toggleAlarm);
-  dom.manualAlert.addEventListener("click", triggerManualAlert);
-  dom.notificationToggle.addEventListener("change", (event) => {
-    state.notificationsEnabled = event.target.checked;
-    localStorage.setItem("dds-notifications-enabled", JSON.stringify(state.notificationsEnabled));
-    if (state.notificationsEnabled) {
-      requestNotificationAccess();
-    }
-    toast(
-      state.notificationsEnabled ? "Notifications enabled" : "Notifications disabled",
-      "Browser popup alerts updated.",
-      "safe"
-    );
-  });
-  dom.radarToggle.addEventListener("change", (event) => {
-    state.radarEnabled = event.target.checked;
-    localStorage.setItem("dds-radar-enabled", JSON.stringify(state.radarEnabled));
-  });
-  dom.reconnectToggle.addEventListener("change", (event) => {
-    state.reconnectEnabled = event.target.checked;
-    localStorage.setItem("dds-reconnect-enabled", JSON.stringify(state.reconnectEnabled));
-    resetFreshnessTimer();
-  });
-  dom.geofenceToggle.addEventListener("change", (event) => {
-    state.geofenceEnabled = event.target.checked;
-    localStorage.setItem("dds-geofence-enabled", JSON.stringify(state.geofenceEnabled));
-    updateInsightCards(state.drones);
-  });
-  dom.geofenceRadius.addEventListener("input", (event) => {
-    state.geofenceRadius = Number(event.target.value);
-    dom.geofenceRadiusValue.textContent = `${state.geofenceRadius} m`;
-    localStorage.setItem("dds-geofence-radius", String(state.geofenceRadius));
-    updateInsightCards(state.drones);
-  });
-  dom.exportHistory.addEventListener("click", exportHistory);
-  dom.clearHistory.addEventListener("click", clearHistory);
-  dom.logoutButton.addEventListener("click", logout);
-  document.addEventListener("click", ensureAudioContext, { once: true });
-}
-
-function toggleTheme() {
-  state.theme = state.theme === "dark" ? "light" : "dark";
-  dom.body.dataset.theme = state.theme;
-  dom.themeToggle.textContent = state.theme === "dark" ? "Light Mode" : "Dark Mode";
-  localStorage.setItem("dds-theme", state.theme);
-  renderChart();
-}
-
-function toggleAdminPanel() {
-  if (state.role !== "admin") {
-    return;
-  }
-  state.adminOpen = !state.adminOpen;
-  dom.adminPanel.classList.toggle("hidden", !state.adminOpen);
-  dom.adminPanel.setAttribute("aria-hidden", String(!state.adminOpen));
-  dom.adminToggle.setAttribute("aria-expanded", String(state.adminOpen));
-}
-
-function toggleAlarm() {
-  state.alarmEnabled = !state.alarmEnabled;
-  dom.alarmToggle.textContent = `Alarm: ${state.alarmEnabled ? "ON" : "OFF"}`;
-  localStorage.setItem("dds-alarm-enabled", JSON.stringify(state.alarmEnabled));
-  if (!state.alarmEnabled) {
-    stopSiren();
-  } else if (state.latestDrone && isDetected(state.latestDrone)) {
-    playSiren();
-  }
-}
-
-function triggerManualAlert() {
-  const syntheticDrone = state.latestDrone || {
-    id: "manual-defense-check",
-    status: "Drone Detected",
-    distance: 0,
-    battery: 100,
-    signal: 100,
-    lat: 13.0827,
-    lng: 80.2707,
-    timestamp: Math.floor(Date.now() / 1000)
-  };
-  handleDetectionEvent(syntheticDrone, true);
-}
-
-function ensureAudioContext() {
-  if (!state.sirenContext) {
-    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextCtor) {
-      state.sirenContext = new AudioContextCtor();
-    }
-  }
-  if (state.sirenContext && state.sirenContext.state === "suspended") {
-    state.sirenContext.resume().catch(() => {});
-  }
-}
-
-function playSiren() {
-  if (!state.alarmEnabled) {
-    return;
-  }
-  ensureAudioContext();
-  if (!state.sirenContext || state.sirenInterval) {
+(function () {
+  const session = window.DDSAuth.requireRole(["viewer", "admin"]);
+  if (!session) {
     return;
   }
 
-  const createPulse = () => {
-    const context = state.sirenContext;
-    const oscillator = context.createOscillator();
-    const gainNode = context.createGain();
-    oscillator.type = "sawtooth";
-    oscillator.frequency.setValueAtTime(680, context.currentTime);
-    oscillator.frequency.linearRampToValueAtTime(980, context.currentTime + 0.45);
-    gainNode.gain.setValueAtTime(0.0001, context.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.05);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.6);
-    oscillator.connect(gainNode).connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.62);
-    state.sirenNodes.push({ oscillator, gainNode });
-    state.sirenNodes = state.sirenNodes.slice(-6);
+  const { refs, seedDefaults, pushAlert, pushLog, defaultDrone, defaultAdminState } = window.DDSFirebase;
+
+  const dom = {
+    body: document.body,
+    roleBadge: document.getElementById("roleBadge"),
+    themeToggle: document.getElementById("themeToggle"),
+    adminToggle: document.getElementById("adminToggle"),
+    logoutButton: document.getElementById("logoutButton"),
+    deviceStatusBadge: document.getElementById("deviceStatusBadge"),
+    statusText: document.getElementById("statusText"),
+    statusDescription: document.getElementById("statusDescription"),
+    distanceValue: document.getElementById("distanceValue"),
+    timestampValue: document.getElementById("timestampValue"),
+    droneCount: document.getElementById("droneCount"),
+    threatValue: document.getElementById("threatValue"),
+    connectionState: document.getElementById("connectionState"),
+    batteryBar: document.getElementById("batteryBar"),
+    signalBar: document.getElementById("signalBar"),
+    batteryValue: document.getElementById("batteryValue"),
+    signalValue: document.getElementById("signalValue"),
+    coordinatesValue: document.getElementById("coordinatesValue"),
+    alertModeValue: document.getElementById("alertModeValue"),
+    speedValue: document.getElementById("speedValue"),
+    altitudeValue: document.getElementById("altitudeValue"),
+    threatLevelBadge: document.getElementById("threatLevelBadge"),
+    systemStateBadge: document.getElementById("systemStateBadge"),
+    nearestDroneValue: document.getElementById("nearestDroneValue"),
+    avgBatteryValue: document.getElementById("avgBatteryValue"),
+    avgSignalValue: document.getElementById("avgSignalValue"),
+    geofenceStatusValue: document.getElementById("geofenceStatusValue"),
+    modeValue: document.getElementById("modeValue"),
+    aiThreatValue: document.getElementById("aiThreatValue"),
+    snapshotImage: document.getElementById("snapshotImage"),
+    mapStatus: document.getElementById("mapStatus"),
+    mapFallback: document.getElementById("mapFallback"),
+    fleetList: document.getElementById("fleetList"),
+    historyList: document.getElementById("historyList"),
+    historyCount: document.getElementById("historyCount"),
+    exportHistory: document.getElementById("exportHistory"),
+    clearHistory: document.getElementById("clearHistory"),
+    alarmToggle: document.getElementById("alarmToggle"),
+    manualAlert: document.getElementById("manualAlert"),
+    adminPanel: document.getElementById("adminPanel"),
+    notificationToggle: document.getElementById("notificationToggle"),
+    radarToggle: document.getElementById("radarToggle"),
+    reconnectToggle: document.getElementById("reconnectToggle"),
+    offlineToggle: document.getElementById("offlineToggle"),
+    firebasePathValue: document.getElementById("firebasePathValue"),
+    browserStatus: document.getElementById("browserStatus"),
+    notificationContainer: document.getElementById("notificationContainer")
   };
 
-  createPulse();
-  state.sirenInterval = window.setInterval(createPulse, 650);
-}
-
-function stopSiren() {
-  if (state.sirenInterval) {
-    clearInterval(state.sirenInterval);
-    state.sirenInterval = null;
-  }
-  state.sirenNodes.forEach(({ oscillator }) => {
-    try {
-      oscillator.stop();
-    } catch (error) {
-      void error;
-    }
-  });
-  state.sirenNodes = [];
-}
-
-function requestNotificationAccess() {
-  if (!("Notification" in window) || !state.notificationsEnabled) {
-    return;
-  }
-  if (Notification.permission === "default") {
-    Notification.requestPermission().catch(() => {});
-  }
-}
-
-function notifyBrowser(title, body) {
-  if (!state.notificationsEnabled) {
-    return;
-  }
-  toast(title, body, "alert");
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification(title, { body });
-  }
-}
-
-function toast(title, message, variant) {
-  const node = document.createElement("div");
-  node.className = `toast ${variant || "safe"}`;
-  node.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>`;
-  dom.notificationContainer.prepend(node);
-  window.setTimeout(() => node.remove(), 4200);
-}
-
-function syncBrowserConnectivity() {
-  state.browserOnline = navigator.onLine;
-  updateBrowserStatus(state.browserOnline ? "Browser online" : "Browser offline");
-  updateDeviceBadge();
-}
-
-function updateBrowserStatus(message) {
-  dom.browserStatus.textContent = message;
-}
-
-function updateDeviceBadge() {
-  const online = state.browserOnline && state.firebaseConnected;
-  dom.deviceStatusBadge.textContent = online ? "System Online" : "System Offline";
-  dom.deviceStatusBadge.className = `badge ${online ? "online" : "offline"}`;
-}
-
-function subscribeRealtime() {
-  connectionRef.on("value", (snapshot) => {
-    state.firebaseConnected = !!snapshot.val();
-    dom.connectionState.textContent = state.firebaseConnected ? "Realtime Connected" : "Realtime Offline";
-    dom.connectionState.className = `mini-badge ${state.firebaseConnected ? "online" : "offline"}`;
-    updateDeviceBadge();
-
-    if (!state.firebaseConnected && state.reconnectEnabled) {
-      scheduleReconnect();
-    }
-  });
-
-  rootDroneRef.on(
-    "value",
-    (snapshot) => {
-      state.lastFirebaseSnapshotAt = Date.now();
-      mergeIncomingData(snapshot.val(), "primary");
-    },
-    (error) => handleFirebaseError(error)
-  );
-
-  dronesRef.on(
-    "value",
-    (snapshot) => {
-      state.lastFirebaseSnapshotAt = Date.now();
-      mergeIncomingData(snapshot.val(), "fleet");
-    },
-    (error) => handleFirebaseError(error)
-  );
-
-  resetFreshnessTimer();
-}
-
-function resetFreshnessTimer() {
-  if (state.freshnessInterval) {
-    clearInterval(state.freshnessInterval);
-    state.freshnessInterval = null;
-  }
-  if (state.reconnectEnabled) {
-    state.freshnessInterval = window.setInterval(checkRealtimeFreshness, 10000);
-  }
-}
-
-function mergeIncomingData(data, source) {
-  let drones = state.drones.slice();
-
-  if (source === "primary") {
-    if (data && typeof data === "object") {
-      const normalized = normalizeDrone(data, "drone");
-      drones = drones.filter((item) => item.id !== normalized.id);
-      drones.unshift(normalized);
-    } else if (!data && drones.length === 0) {
-      setNoDataState();
-      return;
-    }
-  }
-
-  if (source === "fleet") {
-    if (Array.isArray(data)) {
-      drones = data.filter(Boolean).map((item, index) => normalizeDrone(item, `drone-${index + 1}`));
-    } else if (data && typeof data === "object") {
-      drones = Object.entries(data).map(([key, value]) => normalizeDrone(value, key));
-    }
-  }
-
-  const deduped = dedupeDrones(drones)
-    .filter(Boolean)
-    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-  state.drones = deduped;
-  state.latestDrone = deduped[0] || null;
-
-  if (!state.latestDrone) {
-    setNoDataState();
-    return;
-  }
-
-  updateDashboard(state.latestDrone, deduped);
-}
-
-function normalizeDrone(data, fallbackId) {
-  const timestamp = Number(data.timestamp || Math.floor(Date.now() / 1000));
-  return {
-    id: String(data.id || fallbackId),
-    status: String(data.status || "No Drone"),
-    distance: Number.isFinite(Number(data.distance)) ? Number(data.distance) : 0,
-    lat: Number.isFinite(Number(data.lat)) ? Number(data.lat) : null,
-    lng: Number.isFinite(Number(data.lng)) ? Number(data.lng) : null,
-    battery: clamp(Number(data.battery ?? 0), 0, 100),
-    signal: clamp(Number(data.signal ?? 0), 0, 100),
-    timestamp
+  const state = {
+    session,
+    theme: localStorage.getItem("dds-theme") || "dark",
+    alarmEnabled: JSON.parse(localStorage.getItem("dds-alarm-enabled") ?? "true"),
+    notificationsEnabled: JSON.parse(localStorage.getItem("dds-notifications-enabled") ?? "true"),
+    radarEnabled: JSON.parse(localStorage.getItem("dds-radar-enabled") ?? "true"),
+    reconnectEnabled: JSON.parse(localStorage.getItem("dds-reconnect-enabled") ?? "true"),
+    offlineEnabled: JSON.parse(localStorage.getItem("dds-offline-enabled") ?? "true"),
+    firebaseConnected: false,
+    adminOpen: false,
+    adminState: { ...defaultAdminState },
+    drones: [],
+    alerts: JSON.parse(localStorage.getItem("dds-alert-cache") || "[]"),
+    chartPoints: JSON.parse(localStorage.getItem("dds-chart-cache") || "[]"),
+    map: null,
+    markers: new Map(),
+    trails: new Map(),
+    radarAngle: 0,
+    sirenContext: null,
+    sirenInterval: null,
+    latestAlertSignature: "",
+    lastGeofenceSignature: "",
+    lastSnapshotAt: 0
   };
-}
 
-function dedupeDrones(drones) {
-  const seen = new Map();
-  drones.forEach((drone) => {
-    if (!drone) {
-      return;
+  const radarCanvas = document.getElementById("radarCanvas");
+  const radarCtx = radarCanvas.getContext("2d");
+  let analyticsChart = null;
+
+  function init() {
+    seedDefaults();
+    applySession();
+    applyPreferences();
+    bindEvents();
+    renderAlerts();
+    renderFleet();
+    initMap();
+    initChart();
+    subscribeRealtime();
+    startRadar();
+    registerServiceWorker();
+    window.addEventListener("resize", resizeRadar);
+  }
+
+  function applySession() {
+    dom.roleBadge.textContent = state.session.label;
+    dom.roleBadge.className = `mini-badge ${state.session.role === "admin" ? "warning" : "online"}`;
+    if (state.session.role !== "admin") {
+      dom.manualAlert.classList.add("hidden");
     }
-    const existing = seen.get(drone.id);
-    if (!existing || (drone.timestamp || 0) >= (existing.timestamp || 0)) {
-      seen.set(drone.id, drone);
-    }
-  });
-  return Array.from(seen.values());
-}
+  }
 
-function updateDashboard(drone, drones) {
-  const detected = isDetected(drone);
-  dom.statusText.textContent = drone.status || "No Drone";
-  dom.statusText.className = `status-text ${detected ? "alert" : "safe"}`;
-  dom.statusDescription.textContent = detected
-    ? `Threat detected at ${drone.distance} meters. Tracking coordinates and broadcasting alerts in real time.`
-    : "Airspace clear. Sensors are live and the defense system remains on standby.";
-  dom.distanceValue.textContent = `${formatNumber(drone.distance)} m`;
-  dom.timestampValue.textContent = formatTimestamp(drone.timestamp);
-  dom.droneCount.textContent = String(drones.length);
-  dom.batteryValue.textContent = `${formatNumber(drone.battery)}%`;
-  dom.batteryBar.style.width = `${drone.battery}%`;
-  dom.signalValue.textContent = `${formatNumber(drone.signal)}%`;
-  dom.signalBar.style.width = `${drone.signal}%`;
-  dom.coordinatesValue.textContent = drone.lat !== null && drone.lng !== null
-    ? `${drone.lat.toFixed(4)}, ${drone.lng.toFixed(4)}`
-    : "--, --";
-  dom.alertModeValue.textContent = detected ? "Defense Active" : "Standby";
-  document.querySelector(".hero-card").classList.toggle("hero-alert", detected);
+  function applyPreferences() {
+    dom.body.dataset.theme = state.theme;
+    dom.themeToggle.textContent = state.theme === "dark" ? "Light Mode" : "Dark Mode";
+    dom.alarmToggle.textContent = `Alarm: ${state.alarmEnabled ? "ON" : "OFF"}`;
+    dom.notificationToggle.checked = state.notificationsEnabled;
+    dom.radarToggle.checked = state.radarEnabled;
+    dom.reconnectToggle.checked = state.reconnectEnabled;
+    dom.offlineToggle.checked = state.offlineEnabled;
+    dom.browserStatus.textContent = "Ready";
+  }
 
-  updateMap(drone);
-  updateChart(drone);
-  renderFleet();
-  updateInsightCards(drones);
-  evaluateGeofence(drone);
+  function bindEvents() {
+    dom.themeToggle.addEventListener("click", () => {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      localStorage.setItem("dds-theme", state.theme);
+      applyPreferences();
+      if (analyticsChart) {
+        renderChart();
+      }
+    });
 
-  if (detected) {
-    handleDetectionEvent(drone, false);
-  } else {
-    stopSiren();
-    const signature = `${drone.id}-${drone.timestamp}-safe`;
-    if (state.lastAlertSignature !== signature) {
-      pushHistory({
-        title: "No Drone",
-        detail: `Airspace cleared near ${formatLocation(drone)}.`,
-        timestamp: Date.now()
+    dom.adminToggle.addEventListener("click", () => {
+      if (state.session.role === "admin") {
+        window.location.href = "admin.html";
+        return;
+      }
+      state.adminOpen = !state.adminOpen;
+      dom.adminPanel.classList.toggle("hidden", !state.adminOpen);
+      dom.adminToggle.setAttribute("aria-expanded", String(state.adminOpen));
+    });
+
+    dom.logoutButton.addEventListener("click", () => {
+      window.DDSAuth.clearSession();
+      window.location.href = "login.html";
+    });
+
+    dom.alarmToggle.addEventListener("click", () => {
+      state.alarmEnabled = !state.alarmEnabled;
+      localStorage.setItem("dds-alarm-enabled", JSON.stringify(state.alarmEnabled));
+      dom.alarmToggle.textContent = `Alarm: ${state.alarmEnabled ? "ON" : "OFF"}`;
+      if (!state.alarmEnabled) {
+        stopSiren();
+      }
+    });
+
+    dom.manualAlert.addEventListener("click", async () => {
+      const drone = state.drones[0] || { ...defaultDrone, status: "Detected", threat: "HIGH" };
+      await pushAlert({
+        type: "Manual Alert",
+        level: drone.threat || "HIGH",
+        droneId: drone.id || "drone-main",
+        message: "Admin manually triggered an alert."
       });
-      state.lastAlertSignature = signature;
+      await pushLog({
+        action: "Manual alert triggered from viewer dashboard",
+        actor: state.session.email,
+        details: drone.id || "drone-main"
+      });
+    });
+
+    [
+      ["dds-notifications-enabled", dom.notificationToggle, "notificationsEnabled"],
+      ["dds-radar-enabled", dom.radarToggle, "radarEnabled"],
+      ["dds-reconnect-enabled", dom.reconnectToggle, "reconnectEnabled"],
+      ["dds-offline-enabled", dom.offlineToggle, "offlineEnabled"]
+    ].forEach(([key, input, stateKey]) => {
+      input.addEventListener("change", () => {
+        state[stateKey] = input.checked;
+        localStorage.setItem(key, JSON.stringify(input.checked));
+      });
+    });
+
+    dom.exportHistory.addEventListener("click", exportAlertHistory);
+    dom.clearHistory.addEventListener("click", () => {
+      localStorage.removeItem("dds-alert-cache");
+      localStorage.removeItem("dds-chart-cache");
+      state.alerts = [];
+      state.chartPoints = [];
+      renderAlerts();
+      renderChart();
+      toast("Cache cleared", "Offline dashboard cache reset.", "safe");
+    });
+
+    document.addEventListener("click", ensureAudioContext, { once: true });
+  }
+
+  function subscribeRealtime() {
+    refs.connection.on("value", (snapshot) => {
+      state.firebaseConnected = !!snapshot.val();
+      dom.connectionState.textContent = state.firebaseConnected ? "Realtime Connected" : "Realtime Offline";
+      dom.connectionState.className = `mini-badge ${state.firebaseConnected ? "online" : "offline"}`;
+      dom.deviceStatusBadge.textContent = state.firebaseConnected ? "System Online" : "System Offline";
+      dom.deviceStatusBadge.className = `badge ${state.firebaseConnected ? "online" : "offline"}`;
+      dom.browserStatus.textContent = state.firebaseConnected ? "Firebase online" : "Firebase offline";
+    });
+
+    refs.admin.on("value", (snapshot) => {
+      state.adminState = { ...defaultAdminState, ...(snapshot.val() || {}) };
+      applyAdminState();
+    });
+
+    refs.drone.on("value", () => syncDroneSources());
+    refs.drones.on("value", () => syncDroneSources());
+
+    refs.alerts.limitToLast(50).on("value", (snapshot) => {
+      const value = snapshot.val() || {};
+      state.alerts = Object.entries(value)
+        .map(([id, item]) => ({ id, ...item }))
+        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+      localStorage.setItem("dds-alert-cache", JSON.stringify(state.alerts));
+      renderAlerts();
+      maybeRaiseAlert(state.alerts[0]);
+    }, handleFirebaseError);
+  }
+
+  function syncDroneSources() {
+    Promise.all([refs.drone.get(), refs.drones.get()])
+      .then(([droneSnap, dronesSnap]) => {
+        const drones = [];
+        if (droneSnap.exists()) {
+          drones.push(normalizeDrone(droneSnap.val(), "drone-main"));
+        }
+        if (dronesSnap.exists()) {
+          const fleet = dronesSnap.val();
+          if (Array.isArray(fleet)) {
+            fleet.filter(Boolean).forEach((item, index) => drones.push(normalizeDrone(item, `drone-${index + 1}`)));
+          } else {
+            Object.entries(fleet).forEach(([key, item]) => drones.push(normalizeDrone(item, key)));
+          }
+        }
+        state.drones = dedupeById(drones).sort((a, b) => toMillis(b.timestamp) - toMillis(a.timestamp));
+        if (!state.drones.length && state.offlineEnabled) {
+          const cached = JSON.parse(localStorage.getItem("dds-last-drone-cache") || "null");
+          if (cached) {
+            state.drones = [cached];
+          }
+        }
+        renderDashboard();
+      })
+      .catch(handleFirebaseError);
+  }
+
+  function normalizeDrone(item, fallbackId) {
+    const timestamp = item.timestamp || new Date().toISOString();
+    return {
+      id: item.id || fallbackId,
+      status: item.status || "No Drone",
+      distance: Number(item.distance ?? 0),
+      battery: Number(item.battery ?? 0),
+      signal: Number(item.signal ?? 0),
+      lat: Number(item.lat ?? defaultDrone.lat),
+      lng: Number(item.lng ?? defaultDrone.lng),
+      altitude: Number(item.altitude ?? 0),
+      speed: Number(item.speed ?? 0),
+      threat: (item.threat || "LOW").toUpperCase(),
+      timestamp,
+      snapshot: item.snapshot || item.imageUrl || defaultDrone.snapshot
+    };
+  }
+
+  function dedupeById(drones) {
+    const map = new Map();
+    drones.forEach((drone) => {
+      if (!map.has(drone.id) || toMillis(drone.timestamp) > toMillis(map.get(drone.id).timestamp)) {
+        map.set(drone.id, drone);
+      }
+    });
+    return Array.from(map.values());
+  }
+
+  function renderDashboard() {
+    const primary = state.drones[0];
+    if (!primary) {
+      renderNoData();
+      return;
+    }
+
+    localStorage.setItem("dds-last-drone-cache", JSON.stringify(primary));
+    const aiThreat = computeThreat(primary);
+    const threat = state.adminState.aiThreat ? aiThreat : primary.threat;
+    const detected = /detected/i.test(primary.status);
+
+    dom.statusText.textContent = detected ? "Drone Detected" : "No Drone";
+    dom.statusText.className = `status-text ${detected ? "alert" : "safe"}`;
+    dom.statusDescription.textContent = detected
+      ? `Active threat tracked ${format(primary.distance)} meters away with ${threat} threat classification.`
+      : "Airspace clear. Sensors remain armed and synchronized.";
+    dom.distanceValue.textContent = `${format(primary.distance)} m`;
+    dom.timestampValue.textContent = new Date(primary.timestamp).toLocaleString();
+    dom.droneCount.textContent = String(state.drones.length);
+    dom.threatValue.textContent = threat;
+    dom.batteryValue.textContent = `${format(primary.battery)}%`;
+    dom.signalValue.textContent = `${format(primary.signal)}%`;
+    dom.batteryBar.style.width = `${clamp(primary.battery, 0, 100)}%`;
+    dom.signalBar.style.width = `${clamp(primary.signal, 0, 100)}%`;
+    dom.coordinatesValue.textContent = `${primary.lat.toFixed(4)}, ${primary.lng.toFixed(4)}`;
+    dom.alertModeValue.textContent = detected ? "Defence Active" : "Standby";
+    dom.speedValue.textContent = `${format(primary.speed)} km/h`;
+    dom.altitudeValue.textContent = `${format(primary.altitude)} m`;
+    dom.snapshotImage.src = primary.snapshot || defaultDrone.snapshot;
+    dom.snapshotImage.alt = `${primary.id} snapshot`;
+    dom.threatLevelBadge.textContent = `Threat: ${threat}`;
+    dom.threatLevelBadge.className = `mini-badge ${threat === "HIGH" ? "offline" : threat === "MEDIUM" ? "warning" : "online"}`;
+    dom.aiThreatValue.textContent = aiThreat;
+
+    renderInsights(threat);
+    renderFleet();
+    updateMap();
+    pushChartPoint(primary, threat);
+    if (detected && state.alarmEnabled && state.adminState.siren !== false) {
+      playSiren();
+    } else {
+      stopSiren();
     }
   }
-}
 
-function handleDetectionEvent(drone, manual) {
-  const signature = manual ? `manual-${Date.now()}` : `${drone.id}-${drone.timestamp}-${drone.status}`;
-  if (!manual && state.lastAlertSignature === signature) {
-    return;
+  function renderInsights(threat) {
+    const nearest = state.drones.reduce((best, drone) => (drone.distance < best.distance ? drone : best), state.drones[0]);
+    const avgBattery = state.drones.reduce((sum, drone) => sum + drone.battery, 0) / state.drones.length;
+    const avgSignal = state.drones.reduce((sum, drone) => sum + drone.signal, 0) / state.drones.length;
+    dom.nearestDroneValue.textContent = `${nearest.id} (${format(nearest.distance)} m)`;
+    dom.avgBatteryValue.textContent = `${format(avgBattery)}%`;
+    dom.avgSignalValue.textContent = `${format(avgSignal)}%`;
+    dom.geofenceStatusValue.textContent = state.adminState.geofenceEnabled
+      ? `Active at ${state.adminState.geofenceRadius} m`
+      : "Monitoring Off";
+    dom.modeValue.textContent = state.adminState.mode || "LIVE";
+    dom.systemStateBadge.textContent = state.adminState.systemActive ? "System Active" : "System Offline";
+    dom.systemStateBadge.className = `mini-badge ${state.adminState.systemActive ? "online" : "offline"}`;
+    evaluateGeofence(nearest, threat);
   }
 
-  const title = manual ? "Manual alert triggered" : `Drone Detected - ${drone.id}`;
-  const detail = manual
-    ? "Operator manually activated the siren and notification workflow."
-    : `Target at ${formatNumber(drone.distance)} meters, battery ${formatNumber(drone.battery)}%, signal ${formatNumber(drone.signal)}%.`;
-
-  notifyBrowser(title, detail);
-  pushHistory({
-    title,
-    detail,
-    timestamp: Date.now()
-  });
-  playSiren();
-  state.lastAlertSignature = signature;
-}
-
-function pushHistory(entry) {
-  state.history.unshift(entry);
-  state.history = state.history.slice(0, 30);
-  localStorage.setItem("dds-history", JSON.stringify(state.history));
-  renderHistory();
-}
-
-function renderHistory() {
-  dom.historyCount.textContent = `${state.history.length} events`;
-  if (state.history.length === 0) {
-    dom.historyList.innerHTML = '<div class="history-item"><strong>No events yet</strong><p>Incoming alerts and clear-state transitions will appear here.</p></div>';
-    return;
+  function renderFleet() {
+    if (!state.drones.length) {
+      dom.fleetList.innerHTML = '<div class="fleet-item"><strong>No drones</strong><p>Waiting for realtime fleet data.</p></div>';
+      return;
+    }
+    dom.fleetList.innerHTML = state.drones.map((drone) => `
+      <div class="fleet-item">
+        <strong>${escapeHtml(drone.id)} - ${escapeHtml(drone.status)}</strong>
+        <p>Distance ${format(drone.distance)} m | Speed ${format(drone.speed)} km/h | Altitude ${format(drone.altitude)} m</p>
+        <p>Battery ${format(drone.battery)}% | Signal ${format(drone.signal)}% | Threat ${escapeHtml(drone.threat)}</p>
+      </div>
+    `).join("");
   }
 
-  dom.historyList.innerHTML = state.history
-    .map(
-      (item) => `
-        <div class="history-item">
-          <strong>${escapeHtml(item.title)}</strong>
-          <p>${escapeHtml(item.detail)}</p>
-          <p>${formatTimestamp(Math.floor(item.timestamp / 1000))}</p>
-        </div>
-      `
-    )
-    .join("");
-}
-
-function renderFleet() {
-  if (state.drones.length === 0) {
-    dom.fleetList.innerHTML = '<div class="fleet-item"><strong>No tracked drones</strong><p>The fleet panel will populate as soon as Firebase sends telemetry.</p></div>';
-    return;
+  function renderAlerts() {
+    dom.historyCount.textContent = `${state.alerts.length} alerts`;
+    if (!state.alerts.length) {
+      dom.historyList.innerHTML = '<div class="history-item"><strong>No alerts</strong><p>Incoming Firebase alerts will appear here.</p></div>';
+      return;
+    }
+    dom.historyList.innerHTML = state.alerts.slice(0, 30).map((alert) => `
+      <div class="history-item">
+        <strong>${escapeHtml(alert.type || "Alert")} • ${escapeHtml(alert.level || "LOW")}</strong>
+        <p>${escapeHtml(alert.message || "Realtime alert event")}</p>
+        <p>${new Date(alert.time).toLocaleString()}</p>
+      </div>
+    `).join("");
   }
 
-  dom.fleetList.innerHTML = state.drones
-    .map((drone) => {
-      const detected = isDetected(drone);
-      return `
-        <div class="fleet-item">
-          <strong>${escapeHtml(drone.id)} - ${escapeHtml(drone.status)}</strong>
-          <p>Distance: ${formatNumber(drone.distance)} m | Battery: ${formatNumber(drone.battery)}% | Signal: ${formatNumber(drone.signal)}%</p>
-          <p>${detected ? "Threat tracking active" : "Standby"} | ${formatTimestamp(drone.timestamp)}</p>
-        </div>
-      `;
-    })
-    .join("");
-}
-
-function updateInsightCards(drones) {
-  if (!drones.length) {
-    dom.nearestDroneValue.textContent = "None";
-    dom.avgBatteryValue.textContent = "--%";
-    dom.avgSignalValue.textContent = "--%";
-    dom.geofenceStatusValue.textContent = state.geofenceEnabled ? `Armed at ${state.geofenceRadius} m` : "Monitoring Off";
-    updateThreatBadge("Low");
-    return;
+  function maybeRaiseAlert(alert) {
+    if (!alert) {
+      return;
+    }
+    const signature = `${alert.id}-${alert.time}`;
+    if (signature === state.latestAlertSignature) {
+      return;
+    }
+    state.latestAlertSignature = signature;
+    if (state.notificationsEnabled && state.adminState.popups !== false) {
+      toast(alert.type || "Drone Alert", alert.message || "Realtime alert received.", "alert");
+      if ("Notification" in window && Notification.permission === "granted" && state.adminState.push !== false) {
+        new Notification(alert.type || "Drone Alert", { body: alert.message || "Realtime alert received." });
+      }
+    }
   }
 
-  const nearest = drones.reduce((best, drone) => (drone.distance < best.distance ? drone : best), drones[0]);
-  const avgBattery = drones.reduce((sum, drone) => sum + drone.battery, 0) / drones.length;
-  const avgSignal = drones.reduce((sum, drone) => sum + drone.signal, 0) / drones.length;
-  const detectedCount = drones.filter(isDetected).length;
-  const level = detectedCount >= 2 || nearest.distance <= 40 ? "Critical" : detectedCount === 1 || nearest.distance <= 80 ? "High" : "Low";
-
-  dom.nearestDroneValue.textContent = `${nearest.id} (${formatNumber(nearest.distance)} m)`;
-  dom.avgBatteryValue.textContent = `${formatNumber(avgBattery)}%`;
-  dom.avgSignalValue.textContent = `${formatNumber(avgSignal)}%`;
-  dom.geofenceStatusValue.textContent = state.geofenceEnabled ? `Armed at ${state.geofenceRadius} m` : "Monitoring Off";
-  updateThreatBadge(level);
-}
-
-function updateThreatBadge(level) {
-  dom.threatLevelBadge.textContent = `Threat: ${level}`;
-  dom.threatLevelBadge.className =
-    level === "Critical" ? "mini-badge offline" : level === "High" ? "mini-badge warning" : "mini-badge online";
-}
-
-function evaluateGeofence(drone) {
-  if (!state.geofenceEnabled) {
-    return;
-  }
-  const breached = Number(drone.distance) <= state.geofenceRadius;
-  const signature = `${drone.id}-${drone.timestamp}-${breached}`;
-  if (!breached || state.lastGeofenceSignature === signature) {
-    return;
+  function exportAlertHistory() {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      role: state.session.role,
+      alerts: state.alerts
+    };
+    downloadBlob("dds-alert-history.json", JSON.stringify(payload, null, 2), "application/json");
   }
 
-  state.lastGeofenceSignature = signature;
-  const title = `Geofence breach - ${drone.id}`;
-  const detail = `Target entered the ${state.geofenceRadius} meter perimeter at ${formatNumber(drone.distance)} meters.`;
-  notifyBrowser(title, detail);
-  pushHistory({
-    title,
-    detail,
-    timestamp: Date.now()
-  });
-}
+  function computeThreat(drone) {
+    const score = (200 - clamp(drone.distance, 0, 200)) * 0.35
+      + clamp(drone.speed, 0, 120) * 0.3
+      + clamp(drone.altitude, 0, 300) * 0.1
+      + (100 - clamp(drone.battery, 0, 100)) * 0.05
+      + clamp(drone.signal, 0, 100) * 0.2;
+    if (score > 80) {
+      return "HIGH";
+    }
+    if (score > 45) {
+      return "MEDIUM";
+    }
+    return "LOW";
+  }
 
-function updateChart(drone) {
-  const lastPoint = state.chartPoints[state.chartPoints.length - 1];
-  if (!lastPoint || lastPoint.label.getTime() !== (drone.timestamp || 0) * 1000 || lastPoint.value !== drone.distance) {
-    state.chartPoints.push({
-      label: new Date((drone.timestamp || Math.floor(Date.now() / 1000)) * 1000),
-      value: Number(drone.distance) || 0
+  function evaluateGeofence(drone, threat) {
+    if (!state.adminState.geofenceEnabled) {
+      return;
+    }
+    if (drone.distance > Number(state.adminState.geofenceRadius || 120)) {
+      return;
+    }
+    const signature = `${drone.id}-${new Date(drone.timestamp).toISOString()}-${state.adminState.geofenceRadius}`;
+    if (signature === state.lastGeofenceSignature) {
+      return;
+    }
+    state.lastGeofenceSignature = signature;
+    pushAlert({
+      type: "Geo-fence Breach",
+      level: threat,
+      droneId: drone.id,
+      message: `${drone.id} entered the restricted radius at ${format(drone.distance)} meters.`
     });
   }
-  state.chartPoints = state.chartPoints.slice(-18);
-  renderChart();
-}
 
-function renderChart() {
-  fitCanvasToDisplay(chartCanvas);
-  const ctx = chartCtx;
-  const width = chartCanvas.width;
-  const height = chartCanvas.height;
-  const dark = state.theme === "dark";
-  ctx.clearRect(0, 0, width, height);
-
-  ctx.fillStyle = dark ? "rgba(255,255,255,0.03)" : "rgba(16,32,61,0.04)";
-  ctx.fillRect(0, 0, width, height);
-
-  const padding = 34;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
-  const values = state.chartPoints.map((point) => point.value);
-  const maxValue = Math.max(100, ...values, 1);
-
-  ctx.strokeStyle = dark ? "rgba(255,255,255,0.08)" : "rgba(16,32,61,0.1)";
-  ctx.lineWidth = 1;
-  for (let index = 0; index <= 4; index += 1) {
-    const y = padding + (chartHeight / 4) * index;
-    ctx.beginPath();
-    ctx.moveTo(padding, y);
-    ctx.lineTo(width - padding, y);
-    ctx.stroke();
-  }
-
-  if (state.chartPoints.length < 2) {
-    ctx.fillStyle = dark ? "rgba(236,244,255,0.75)" : "rgba(16,32,61,0.75)";
-    ctx.font = "16px Space Grotesk";
-    ctx.fillText("Waiting for enough telemetry to render a trend line.", padding, height / 2);
-    return;
-  }
-
-  const points = state.chartPoints.map((point, index) => {
-    const x = padding + (chartWidth / (state.chartPoints.length - 1)) * index;
-    const y = height - padding - (point.value / maxValue) * chartHeight;
-    return { x, y, value: point.value };
-  });
-
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, height - padding);
-  points.forEach((point) => ctx.lineTo(point.x, point.y));
-  ctx.lineTo(points[points.length - 1].x, height - padding);
-  ctx.closePath();
-  const fill = ctx.createLinearGradient(0, padding, 0, height - padding);
-  fill.addColorStop(0, dark ? "rgba(0, 240, 255, 0.35)" : "rgba(20, 100, 255, 0.28)");
-  fill.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = fill;
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(points[0].x, points[0].y);
-  points.forEach((point) => ctx.lineTo(point.x, point.y));
-  ctx.strokeStyle = dark ? "#48dbfb" : "#1464ff";
-  ctx.lineWidth = 3;
-  ctx.stroke();
-
-  ctx.fillStyle = dark ? "#ffffff" : "#10203d";
-  ctx.font = "12px Space Grotesk";
-  points.forEach((point, index) => {
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    if (index === points.length - 1) {
-      ctx.fillText(`${formatNumber(point.value)}m`, point.x - 16, point.y - 14);
+  function initMap() {
+    if (!window.L) {
+      dom.mapFallback.classList.remove("hidden");
+      dom.mapStatus.textContent = "Map Load Failed";
+      return;
     }
-  });
-}
-
-function startRadarLoop() {
-  const draw = () => {
-    renderRadar();
-    window.requestAnimationFrame(draw);
-  };
-  draw();
-}
-
-function renderRadar() {
-  fitCanvasToDisplay(radarCanvas);
-  const ctx = radarCtx;
-  const width = radarCanvas.width;
-  const height = radarCanvas.height;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) * 0.42;
-  const dark = state.theme === "dark";
-  ctx.clearRect(0, 0, width, height);
-
-  ctx.fillStyle = dark ? "#04101f" : "#eff5ff";
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.strokeStyle = dark ? "rgba(72, 219, 251, 0.22)" : "rgba(20, 100, 255, 0.22)";
-  ctx.lineWidth = 1.4;
-  [0.25, 0.5, 0.75, 1].forEach((ratio) => {
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius * ratio, 0, Math.PI * 2);
-    ctx.stroke();
-  });
-
-  ctx.beginPath();
-  ctx.moveTo(centerX - radius, centerY);
-  ctx.lineTo(centerX + radius, centerY);
-  ctx.moveTo(centerX, centerY - radius);
-  ctx.lineTo(centerX, centerY + radius);
-  ctx.stroke();
-
-  if (state.radarEnabled) {
-    state.radarAngle += 0.02;
+    state.map = L.map("map", { zoomControl: true }).setView([defaultDrone.lat, defaultDrone.lng], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(state.map);
+    dom.mapStatus.textContent = "Map Tracking Active";
   }
 
-  const sweepGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
-  sweepGradient.addColorStop(0, dark ? "rgba(0, 240, 255, 0.42)" : "rgba(20, 100, 255, 0.36)");
-  sweepGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-  ctx.save();
-  ctx.translate(centerX, centerY);
-  ctx.rotate(state.radarAngle);
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.arc(0, 0, radius, -0.16, 0.16);
-  ctx.closePath();
-  ctx.fillStyle = sweepGradient;
-  ctx.fill();
-  ctx.restore();
-
-  const dronesToPlot = state.drones.slice(0, 6);
-  dronesToPlot.forEach((drone, index) => {
-    const angle = (index / Math.max(dronesToPlot.length, 1)) * Math.PI * 2 + state.radarAngle * 0.35;
-    const distanceRatio = clamp(drone.distance / 200, 0.12, 1);
-    const x = centerX + Math.cos(angle) * radius * distanceRatio * 0.9;
-    const y = centerY + Math.sin(angle) * radius * distanceRatio * 0.9;
-    ctx.beginPath();
-    ctx.arc(x, y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = isDetected(drone) ? "#ff4d6d" : "#40f3a1";
-    ctx.shadowColor = ctx.fillStyle;
-    ctx.shadowBlur = 20;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  });
-
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, 7, 0, Math.PI * 2);
-  ctx.fillStyle = dark ? "#48dbfb" : "#1464ff";
-  ctx.fill();
-}
-
-function initMap() {
-  if (!window.L) {
-    dom.mapStatus.textContent = "Map Load Failed";
-    dom.mapFallback.classList.remove("hidden");
-    return;
-  }
-  setupMap();
-}
-
-function setupMap() {
-  state.mapLoaded = true;
-  const fallbackLocation = { lat: 13.0827, lng: 80.2707 };
-  state.map = L.map("map", {
-    zoomControl: true,
-    attributionControl: true
-  }).setView([fallbackLocation.lat, fallbackLocation.lng], 11);
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors"
-  }).addTo(state.map);
-
-  state.marker = L.marker([fallbackLocation.lat, fallbackLocation.lng], {
-    title: "Tracked Drone"
-  }).addTo(state.map);
-  state.marker.bindPopup("Tracked Drone");
-  state.trailLine = L.polyline([], {
-    color: "#48dbfb",
-    weight: 3,
-    opacity: 0.8
-  }).addTo(state.map);
-
-  dom.mapStatus.textContent = "Map Tracking Active";
-  dom.mapFallback.classList.add("hidden");
-}
-
-function updateMap(drone) {
-  if (!state.mapLoaded || !state.map || !state.marker || drone.lat === null || drone.lng === null) {
-    return;
-  }
-
-  const position = { lat: drone.lat, lng: drone.lng };
-  state.marker.setLatLng([position.lat, position.lng]);
-  state.marker.setPopupContent(`Tracked Drone<br>${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`);
-  state.latestTrail.push([position.lat, position.lng]);
-  state.latestTrail = state.latestTrail.slice(-12);
-  if (state.trailLine) {
-    state.trailLine.setLatLngs(state.latestTrail);
-  }
-  state.map.panTo([position.lat, position.lng], { animate: true, duration: 0.5 });
-}
-
-function handleFirebaseError(error) {
-  console.error("Firebase error:", error);
-  dom.connectionState.textContent = "Realtime Error";
-  dom.connectionState.className = "mini-badge offline";
-  dom.statusText.textContent = "Connection Error";
-  dom.statusText.className = "status-text loading";
-  dom.statusDescription.textContent = "Unable to read Firebase data. The app will keep trying to reconnect automatically.";
-  pushHistory({
-    title: "Connection Error",
-    detail: error.message || "Firebase listener failed.",
-    timestamp: Date.now()
-  });
-  if (state.reconnectEnabled) {
-    scheduleReconnect();
-  }
-}
-
-function scheduleReconnect() {
-  if (state.reconnectTimer) {
-    return;
-  }
-  state.reconnectTimer = window.setTimeout(() => {
-    state.reconnectTimer = null;
-    try {
-      database.goOnline();
-      updateBrowserStatus("Reconnect attempted");
-    } catch (error) {
-      console.error("Reconnect failed:", error);
+  function updateMap() {
+    if (!state.map) {
+      return;
     }
-  }, 3000);
-}
-
-function checkRealtimeFreshness() {
-  if (!state.reconnectEnabled) {
-    return;
-  }
-  const staleFor = Date.now() - state.lastFirebaseSnapshotAt;
-  if (state.lastFirebaseSnapshotAt > 0 && staleFor > 25000 && navigator.onLine) {
-    try {
-      database.goOffline();
-      window.setTimeout(() => database.goOnline(), 600);
-      updateBrowserStatus("Refreshing realtime connection");
-    } catch (error) {
-      console.error("Realtime refresh failed:", error);
+    state.drones.forEach((drone) => {
+      if (!state.markers.has(drone.id)) {
+        const marker = L.marker([drone.lat, drone.lng], { title: drone.id }).addTo(state.map);
+        marker.bindPopup(`${escapeHtml(drone.id)}<br>${drone.lat.toFixed(4)}, ${drone.lng.toFixed(4)}`);
+        state.markers.set(drone.id, marker);
+        state.trails.set(drone.id, L.polyline([], { color: "#48dbfb", weight: 3, opacity: 0.85 }).addTo(state.map));
+      }
+      const marker = state.markers.get(drone.id);
+      const trail = state.trails.get(drone.id);
+      marker.setLatLng([drone.lat, drone.lng]);
+      marker.setPopupContent(`${escapeHtml(drone.id)}<br>${drone.lat.toFixed(4)}, ${drone.lng.toFixed(4)}<br>Threat ${escapeHtml(drone.threat)}`);
+      const currentTrail = trail.getLatLngs();
+      currentTrail.push([drone.lat, drone.lng]);
+      trail.setLatLngs(currentTrail.slice(-14));
+    });
+    if (state.drones[0]) {
+      state.map.panTo([state.drones[0].lat, state.drones[0].lng], { animate: true, duration: 0.35 });
     }
   }
-}
 
-function setNoDataState() {
-  dom.statusText.textContent = "Waiting...";
-  dom.statusText.className = "status-text loading";
-  dom.statusDescription.textContent = "No drone data found yet at the configured Firebase paths.";
-  dom.distanceValue.textContent = "-- m";
-  dom.timestampValue.textContent = "No signal yet";
-  dom.droneCount.textContent = "0";
-  dom.batteryValue.textContent = "--%";
-  dom.signalValue.textContent = "--%";
-  dom.coordinatesValue.textContent = "--, --";
-  dom.alertModeValue.textContent = "Standby";
-  dom.batteryBar.style.width = "0%";
-  dom.signalBar.style.width = "0%";
-  document.querySelector(".hero-card").classList.remove("hero-alert");
-  stopSiren();
-  renderFleet();
-  updateInsightCards([]);
-}
-
-function resizeCanvases() {
-  fitCanvasToDisplay(radarCanvas);
-  fitCanvasToDisplay(chartCanvas);
-  renderChart();
-}
-
-function fitCanvasToDisplay(canvas) {
-  const rect = canvas.getBoundingClientRect();
-  const ratio = window.devicePixelRatio || 1;
-  const width = Math.max(Math.floor(rect.width * ratio), 1);
-  const height = Math.max(Math.floor(rect.height * ratio), 1);
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
+  function initChart() {
+    const canvas = document.getElementById("chartCanvas");
+    analyticsChart = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: "Distance (m)",
+            data: [],
+            borderColor: "#48dbfb",
+            backgroundColor: "rgba(72,219,251,0.18)",
+            fill: true,
+            tension: 0.35
+          },
+          {
+            label: "Speed (km/h)",
+            data: [],
+            borderColor: "#00f5d4",
+            backgroundColor: "rgba(0,245,212,0.12)",
+            fill: false,
+            tension: 0.35
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: "#ecf4ff" } }
+        },
+        scales: {
+          x: { ticks: { color: "#92a4c5" }, grid: { color: "rgba(146,164,197,0.1)" } },
+          y: { ticks: { color: "#92a4c5" }, grid: { color: "rgba(146,164,197,0.1)" } }
+        }
+      }
+    });
+    renderChart();
   }
-}
 
-function isDetected(drone) {
-  return String(drone.status || "").toLowerCase().includes("detected");
-}
-
-function formatTimestamp(timestamp) {
-  const value = Number(timestamp);
-  if (!value) {
-    return "Unknown";
+  function pushChartPoint(drone, threat) {
+    state.chartPoints.push({
+      label: new Date(drone.timestamp).toLocaleTimeString(),
+      distance: drone.distance,
+      speed: drone.speed,
+      threat
+    });
+    state.chartPoints = state.chartPoints.slice(-18);
+    localStorage.setItem("dds-chart-cache", JSON.stringify(state.chartPoints));
+    renderChart();
   }
-  return new Date(value * 1000).toLocaleString();
-}
 
-function formatNumber(value) {
-  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
-
-function formatLocation(drone) {
-  if (drone.lat === null || drone.lng === null) {
-    return "unknown coordinates";
+  function renderChart() {
+    if (!analyticsChart) {
+      return;
+    }
+    analyticsChart.data.labels = state.chartPoints.map((item) => item.label);
+    analyticsChart.data.datasets[0].data = state.chartPoints.map((item) => item.distance);
+    analyticsChart.data.datasets[1].data = state.chartPoints.map((item) => item.speed);
+    analyticsChart.options.scales.x.ticks.color = state.theme === "dark" ? "#92a4c5" : "#52627f";
+    analyticsChart.options.scales.y.ticks.color = state.theme === "dark" ? "#92a4c5" : "#52627f";
+    analyticsChart.options.plugins.legend.labels.color = state.theme === "dark" ? "#ecf4ff" : "#10203d";
+    analyticsChart.update();
   }
-  return `${drone.lat.toFixed(4)}, ${drone.lng.toFixed(4)}`;
-}
 
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
-}
+  function applyAdminState() {
+    dom.firebasePathValue.textContent = `${state.adminState.firebasePaths.primary} • ${state.adminState.firebasePaths.fleet} • ${state.adminState.firebasePaths.alerts}`;
+    if (state.adminState.theme && state.adminState.theme !== state.theme) {
+      state.theme = state.adminState.theme;
+      localStorage.setItem("dds-theme", state.theme);
+      applyPreferences();
+      renderChart();
+    }
+    if (!state.adminState.systemActive) {
+      dom.statusText.textContent = "System Offline";
+      dom.statusText.className = "status-text loading";
+      stopSiren();
+    }
+  }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+  function renderNoData() {
+    dom.statusText.textContent = "Waiting...";
+    dom.statusText.className = "status-text loading";
+    dom.statusDescription.textContent = "No drone data available yet.";
+    dom.snapshotImage.src = defaultDrone.snapshot;
+    dom.fleetList.innerHTML = '<div class="fleet-item"><strong>No drones</strong><p>Waiting for realtime fleet data.</p></div>';
+  }
 
-function exportHistory() {
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    totalEvents: state.history.length,
-    events: state.history
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `drone-defense-history-${Date.now()}.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  toast("History exported", "Alert history downloaded as JSON.", "safe");
-}
+  function ensureAudioContext() {
+    if (!state.sirenContext) {
+      const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextCtor) {
+        state.sirenContext = new AudioContextCtor();
+      }
+    }
+    if (state.sirenContext && state.sirenContext.state === "suspended") {
+      state.sirenContext.resume().catch(() => {});
+    }
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }
 
-function clearHistory() {
-  state.history = [];
-  localStorage.removeItem("dds-history");
-  renderHistory();
-  toast("History cleared", "Local alert history has been reset.", "safe");
-}
+  function playSiren() {
+    if (!state.alarmEnabled || state.sirenInterval) {
+      return;
+    }
+    ensureAudioContext();
+    if (!state.sirenContext) {
+      return;
+    }
+    const createPulse = () => {
+      const oscillator = state.sirenContext.createOscillator();
+      const gain = state.sirenContext.createGain();
+      oscillator.type = "sawtooth";
+      oscillator.frequency.setValueAtTime(640, state.sirenContext.currentTime);
+      oscillator.frequency.linearRampToValueAtTime(980, state.sirenContext.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.0001, state.sirenContext.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.07, state.sirenContext.currentTime + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, state.sirenContext.currentTime + 0.45);
+      oscillator.connect(gain).connect(state.sirenContext.destination);
+      oscillator.start();
+      oscillator.stop(state.sirenContext.currentTime + 0.48);
+    };
+    createPulse();
+    state.sirenInterval = window.setInterval(createPulse, 520);
+  }
 
-function logout() {
-  sessionStorage.removeItem("dds-auth-role");
-  sessionStorage.removeItem("dds-auth-email");
-  window.location.href = "login.html";
-}
+  function stopSiren() {
+    if (state.sirenInterval) {
+      clearInterval(state.sirenInterval);
+      state.sirenInterval = null;
+    }
+  }
 
-init();
+  function startRadar() {
+    const frame = () => {
+      drawRadar();
+      requestAnimationFrame(frame);
+    };
+    resizeRadar();
+    frame();
+  }
+
+  function resizeRadar() {
+    const rect = radarCanvas.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+    radarCanvas.width = Math.max(1, rect.width * ratio);
+    radarCanvas.height = Math.max(1, rect.height * ratio);
+  }
+
+  function drawRadar() {
+    const width = radarCanvas.width;
+    const height = radarCanvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(width, height) * 0.42;
+    radarCtx.clearRect(0, 0, width, height);
+    radarCtx.fillStyle = state.theme === "dark" ? "#04101f" : "#f3f8ff";
+    radarCtx.fillRect(0, 0, width, height);
+    radarCtx.strokeStyle = "rgba(72,219,251,0.24)";
+    radarCtx.lineWidth = 1.2;
+    [0.25, 0.5, 0.75, 1].forEach((ratio) => {
+      radarCtx.beginPath();
+      radarCtx.arc(centerX, centerY, radius * ratio, 0, Math.PI * 2);
+      radarCtx.stroke();
+    });
+    if (state.radarEnabled) {
+      state.radarAngle += 0.025;
+    }
+    radarCtx.save();
+    radarCtx.translate(centerX, centerY);
+    radarCtx.rotate(state.radarAngle);
+    const gradient = radarCtx.createRadialGradient(0, 0, 0, 0, 0, radius);
+    gradient.addColorStop(0, "rgba(0,245,212,0.35)");
+    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    radarCtx.beginPath();
+    radarCtx.moveTo(0, 0);
+    radarCtx.arc(0, 0, radius, -0.18, 0.18);
+    radarCtx.closePath();
+    radarCtx.fillStyle = gradient;
+    radarCtx.fill();
+    radarCtx.restore();
+    state.drones.slice(0, 8).forEach((drone, index) => {
+      const angle = state.radarAngle + index * (Math.PI / 4);
+      const distanceRatio = clamp(drone.distance / 250, 0.15, 1);
+      const x = centerX + Math.cos(angle) * radius * distanceRatio;
+      const y = centerY + Math.sin(angle) * radius * distanceRatio;
+      radarCtx.beginPath();
+      radarCtx.arc(x, y, 6, 0, Math.PI * 2);
+      radarCtx.fillStyle = computeThreat(drone) === "HIGH" ? "#ff4d6d" : "#40f3a1";
+      radarCtx.shadowColor = radarCtx.fillStyle;
+      radarCtx.shadowBlur = 18;
+      radarCtx.fill();
+      radarCtx.shadowBlur = 0;
+    });
+  }
+
+  function registerServiceWorker() {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    }
+  }
+
+  function toast(title, message, variant) {
+    const node = document.createElement("div");
+    node.className = `toast ${variant || "safe"}`;
+    node.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>`;
+    dom.notificationContainer.prepend(node);
+    setTimeout(() => node.remove(), 4200);
+  }
+
+  function downloadBlob(filename, contents, type) {
+    const blob = new Blob([contents], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleFirebaseError(error) {
+    console.error(error);
+    dom.browserStatus.textContent = "Firebase error";
+    if (state.offlineEnabled) {
+      const cachedDrone = JSON.parse(localStorage.getItem("dds-last-drone-cache") || "null");
+      if (cachedDrone) {
+        state.drones = [cachedDrone];
+        renderDashboard();
+      }
+    }
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(Number(value) || 0, min), max);
+  }
+
+  function format(value) {
+    return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+
+  function toMillis(value) {
+    return new Date(value).getTime() || 0;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  init();
+})();
