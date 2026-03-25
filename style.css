@@ -126,6 +126,10 @@ h1 {
   gap: 12px;
 }
 
+.topbar-actions > button {
+  min-height: 46px;
+}
+
 .dashboard {
   display: grid;
   gap: 20px;
@@ -305,6 +309,7 @@ h1 {
   position: relative;
   display: grid;
   place-items: center;
+  min-height: 320px;
 }
 
 #radarCanvas,
@@ -312,6 +317,10 @@ h1 {
   width: 100%;
   max-width: 100%;
   display: block;
+}
+
+#chartCanvas {
+  min-height: 240px;
 }
 
 .telemetry-card .metric-grid {
@@ -386,6 +395,7 @@ h1 {
   max-height: 360px;
   overflow: auto;
   padding-right: 6px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .history-item,
@@ -491,6 +501,7 @@ h1 {
   padding: 12px 18px;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  min-height: 48px;
 }
 
 .ghost-button {
@@ -544,11 +555,15 @@ h1 {
   .hero-card {
     grid-template-columns: 1fr;
   }
+
+  .hero-radar {
+    min-height: 280px;
+  }
 }
 
 @media (max-width: 760px) {
   .app-shell {
-    padding: 20px 14px 44px;
+    padding: 16px 12px 36px;
   }
 
   .topbar,
@@ -558,11 +573,29 @@ h1 {
     align-items: flex-start;
   }
 
+  .topbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .topbar-actions > button {
+    width: 100%;
+  }
+
   .quick-stats,
   .telemetry-card .metric-grid,
   .insights-grid,
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stat-tile,
+  .metric-box,
+  .admin-info,
+  .toggle-row,
+  .range-row {
+    padding: 14px;
   }
 
   .hero-card,
@@ -573,10 +606,109 @@ h1 {
   .fleet-card,
   .chart-card,
   .admin-panel {
-    padding: 20px;
+    padding: 18px;
   }
 
   .map-panel {
-    min-height: 280px;
+    min-height: 250px;
+  }
+
+  .hero-radar {
+    min-height: 240px;
+  }
+
+  #chartCanvas {
+    min-height: 220px;
+  }
+
+  .history-list,
+  .fleet-list {
+    max-height: 280px;
+    padding-right: 2px;
+  }
+
+  .control-row > button,
+  .topbar-actions > button {
+    width: 100%;
+  }
+
+  .ghost-button,
+  .primary-button,
+  .danger-button {
+    padding: 14px 16px;
+  }
+
+  h3 {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    padding: 12px 10px 28px;
+  }
+
+  h1 {
+    font-size: clamp(1.7rem, 8vw, 2.3rem);
+  }
+
+  .eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+  }
+
+  .status-text {
+    font-size: 1.7rem;
+  }
+
+  .topbar-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-stats {
+    gap: 10px;
+  }
+
+  .hero-card,
+  .hero-copy,
+  .telemetry-card,
+  .map-card,
+  .history-card,
+  .fleet-card,
+  .chart-card,
+  .admin-panel,
+  .insights-card,
+  .command-card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .stat-tile strong,
+  .metric-box strong,
+  .admin-info strong {
+    font-size: 1rem;
+  }
+
+  .map-panel {
+    min-height: 220px;
+  }
+
+  .hero-radar {
+    min-height: 210px;
+  }
+
+  #chartCanvas {
+    min-height: 200px;
+  }
+
+  .history-list,
+  .fleet-list {
+    max-height: 240px;
+  }
+
+  .badge,
+  .mini-badge {
+    font-size: 0.82rem;
+    padding: 7px 12px;
   }
 }
